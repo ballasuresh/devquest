@@ -81,7 +81,7 @@ const STAGES: Stage[] = [
     base: "chaiport.isle",
     beats: [
       beat({
-        goal: "Open the shelf",
+        goal: "Tray",
         paths: ["/tea", "/teas", "/orders"],
         path: "/tea",
         win: (hit) => hit.method === "GET" && hit.path === "/teas" && hit.status === 200,
@@ -91,24 +91,24 @@ const STAGES: Stage[] = [
   {
     name: "Explore",
     base: "chaiport.isle",
-    recall: beat({ goal: "Shelf again", paths: ["/teas"], path: "/teas", win: (hit) => hit.method === "GET" && hit.path === "/teas" && hit.status === 200 }),
+    recall: beat({ goal: "Tray", paths: ["/teas"], path: "/teas", win: (hit) => hit.method === "GET" && hit.path === "/teas" && hit.status === 200 }),
     beats: [
       beat({
-        goal: "One jar",
+        goal: "#12",
         paths: ["/teas", "/teas/12", "/teas/99"],
         path: "/teas",
         win: (hit) => hit.method === "GET" && hit.path === "/teas/12" && hit.status === 200,
       }),
       beat({
-        goal: "Missing jar",
+        goal: "#99",
         paths: ["/teas/12", "/teas/99"],
         path: "/teas/12",
         win: (hit) => hit.method === "GET" && hit.path === "/teas/99" && hit.status === 404,
       }),
-      post("Drop off", { win: (hit) => hit.method === "POST" && hit.path === "/orders" && hit.auth && hit.json && typeof hit.body?.qty === "number" && hit.status === 201 }),
-      post("No pass", { auth: false, win: (hit) => hit.method === "POST" && hit.path === "/orders" && !hit.auth && hit.status === 401 }),
+      post("Asha", { win: (hit) => hit.method === "POST" && hit.path === "/orders" && hit.auth && hit.json && typeof hit.body?.qty === "number" && hit.status === 201 }),
+      post("Bare", { auth: false, win: (hit) => hit.method === "POST" && hit.path === "/orders" && !hit.auth && hit.status === 401 }),
       beat({
-        goal: "Their kettle",
+        goal: "Kettle",
         paths: ["/kettle"],
         path: "/kettle",
         showKettle: true,
@@ -119,7 +119,7 @@ const STAGES: Stage[] = [
   {
     name: "Assign",
     base: "chaiport.isle",
-    recall: post("Missing qty", {
+    recall: post("Ravi", {
       body: `{
   "tea_id": 3,
   "name": "Ravi"
@@ -127,10 +127,10 @@ const STAGES: Stage[] = [
       win: (hit) => hit.status === 400 && hit.body?.qty === undefined,
     }),
     beats: [
-      beat({ goal: "Full list", paths: ["/teas"], path: "/teas", win: (hit) => hit.method === "GET" && hit.path === "/teas" && hit.status === 200 }),
-      beat({ goal: "Ginger", paths: ["/teas", "/teas/7"], path: "/teas", win: (hit) => hit.method === "GET" && hit.path === "/teas/7" && hit.status === 200 }),
-      post("Asha", { win: (hit) => hit.status === 201 && hit.body?.name === "Asha" && hit.body?.qty === 2 && hit.body?.tea_id === 12 }),
-      post("Less sugar", {
+      beat({ goal: "List", paths: ["/teas"], path: "/teas", win: (hit) => hit.method === "GET" && hit.path === "/teas" && hit.status === 200 }),
+      beat({ goal: "#7", paths: ["/teas", "/teas/7"], path: "/teas", win: (hit) => hit.method === "GET" && hit.path === "/teas/7" && hit.status === 200 }),
+      post("2 Masala", { win: (hit) => hit.status === 201 && hit.body?.name === "Asha" && hit.body?.qty === 2 && hit.body?.tea_id === 12 }),
+      post("3 Ginger", {
         body: `{
   "tea_id": 7,
   "qty": 3,
@@ -144,12 +144,12 @@ const STAGES: Stage[] = [
   {
     name: "Predict",
     base: "chaiport.isle",
-    recall: beat({ goal: "Ginger again", paths: ["/teas/7"], path: "/teas/7", win: (hit) => hit.path === "/teas/7" && hit.status === 200 }),
+    recall: beat({ goal: "#7", paths: ["/teas/7"], path: "/teas/7", win: (hit) => hit.path === "/teas/7" && hit.status === 200 }),
     beats: [
-      beat({ goal: "Call it", lock: true, kind: "predict", path: "/teas", paths: ["/teas"], win: (hit) => hit.guess === 200 && hit.status === 200 }),
-      beat({ goal: "Call it", lock: true, kind: "predict", path: "/teas/99", paths: ["/teas/99"], win: (hit) => hit.guess === 404 && hit.status === 404 }),
-      post("Call it", { lock: true, kind: "predict", auth: false, win: (hit) => hit.guess === 401 && hit.status === 401 }),
-      post("Call it", {
+      beat({ goal: "", lock: true, kind: "predict", path: "/teas", paths: ["/teas"], win: (hit) => hit.guess === 200 && hit.status === 200 }),
+      beat({ goal: "", lock: true, kind: "predict", path: "/teas/99", paths: ["/teas/99"], win: (hit) => hit.guess === 404 && hit.status === 404 }),
+      post("", { lock: true, kind: "predict", auth: false, win: (hit) => hit.guess === 401 && hit.status === 401 }),
+      post("", {
         lock: true,
         kind: "predict",
         body: `{
@@ -158,28 +158,28 @@ const STAGES: Stage[] = [
 }`,
         win: (hit) => hit.guess === 400 && hit.status === 400,
       }),
-      post("Call it", { lock: true, kind: "predict", win: (hit) => hit.guess === 201 && hit.status === 201 }),
+      post("", { lock: true, kind: "predict", win: (hit) => hit.guess === 201 && hit.status === 201 }),
     ],
   },
   {
     name: "Code",
     base: "chaiport.isle",
-    recall: post("Pass on", { auth: false, showCode: true, win: (hit) => hit.auth && hit.status === 201 }),
+    recall: post("", { auth: false, showCode: true, win: (hit) => hit.auth && hit.status === 201 }),
     beats: [
       beat({
-        goal: "get",
+        goal: "",
         showCode: true,
         paths: ["/teas", "/tea"],
         path: "",
         win: (hit) => hit.method === "GET" && hit.path === "/teas" && hit.status === 200,
       }),
-      post("post", { showCode: true, auth: false, json: false, win: (hit) => hit.auth && hit.json && typeof hit.body?.qty === "number" && hit.status === 201 }),
+      post("", { showCode: true, auth: false, json: false, win: (hit) => hit.auth && hit.json && typeof hit.body?.qty === "number" && hit.status === 201 }),
     ],
   },
   {
     name: "Debug",
     base: "chaiport.isle",
-    recall: post("Number", {
+    recall: post("2", {
       body: `{
   "tea_id": 12,
   "qty": "2",
@@ -188,13 +188,13 @@ const STAGES: Stage[] = [
       win: (hit) => hit.status === 201 && hit.body?.qty === 2,
     }),
     beats: [
-      post("Address", {
+      post("/orders", {
         paths: ["/order", "/orders"],
         path: "/order",
         win: (hit) => hit.path === "/orders" && hit.status === 201,
       }),
-      post("Pass", { auth: false, win: (hit) => hit.auth && hit.status === 201 }),
-      post("Word", {
+      post("PASS", { auth: false, win: (hit) => hit.auth && hit.status === 201 }),
+      post("2", {
         body: `{
   "tea_id": 12,
   "qty": "two",
@@ -214,16 +214,16 @@ const STAGES: Stage[] = [
   {
     name: "Master",
     base: "lanterns.isle",
-    recall: post("Labels", { auth: false, win: (hit) => hit.auth && hit.json && hit.status === 201 }),
+    recall: post("PASS", { auth: false, win: (hit) => hit.auth && hit.json && hit.status === 201 }),
     beats: [
       beat({
-        goal: "Scout",
+        goal: "Moon",
         base: "lanterns.isle",
         paths: ["/lanterns"],
         path: "/lanterns",
         win: (hit) => hit.method === "GET" && hit.path === "/lanterns" && hit.status === 200,
       }),
-      post("Rent", {
+      post("3 days", {
         base: "lanterns.isle",
         paths: ["/rentals", "/lanterns"],
         path: "/rentals",
@@ -234,14 +234,14 @@ const STAGES: Stage[] = [
         win: (hit) => hit.path === "/rentals" && hit.status === 201 && hit.body?.lantern_id === 7 && hit.body?.days === 3,
       }),
       beat({
-        goal: "Receipt",
+        goal: "L9",
         kind: "read",
         base: "lanterns.isle",
         receipt: { rental_id: "L9", lantern_id: 7, return_by: "Festival day 3" },
         pick: ["rental_id", "return_by"],
         win: () => false,
       }),
-      post("Bounce", {
+      post("Star", {
         base: "lanterns.isle",
         paths: ["/rentals"],
         path: "/rentals",
@@ -257,6 +257,44 @@ const STAGES: Stage[] = [
 ];
 
 const ISLANDS = ["Chai Port", "Keygate", "Tidewall", "Echo Market", "Oracle Steps", "Whisper Loft", "Glass Archive", "Lighthouse"];
+
+const FEED: [string, string, string][] = [
+  ["miss", "GET /tea", "404"],
+  ["land", "GET /teas", "200 · Masala"],
+  ["order", "POST /orders", "201 · Asha"],
+  ["read", "GET /teas/12", "200 · #12"],
+  ["heat", "GET /kettle", "200 · hot"],
+  ["rank", "POST /rentals", "201 · L9"],
+];
+
+function league(stage: number) {
+  if (stage >= 6) return "Gold";
+  if (stage >= 3) return "Silver";
+  return "Bronze";
+}
+
+function Replay() {
+  const [count, setCount] = useState(1);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setCount(FEED.length);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setCount((value) => (value >= FEED.length ? 1 : value + 1));
+    }, 700);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <div className="tape" aria-hidden="true">
+      <p className="tape-path">~/relay/chai-port</p>
+      <p className="tape-prompt">&gt; Tray for Asha.</p>
+      {FEED.slice(0, count).map(([verb, call, note]) => (
+        <p key={verb} className="tape-line"><b>{verb}</b><span>{call}</span><em>{note}</em></p>
+      ))}
+    </div>
+  );
+}
 
 function normalize(pathname: string) {
   const path = pathname || "/";
@@ -345,11 +383,10 @@ export function Isles() {
   const continueHref = mission.stage >= 7 ? "/win" : mission.stage === 0 ? "/map" : `/play/${mission.stage + 1}`;
 
   return (
-    <div className="isles">
+    <div className={`isles${theme === "light" ? " lite" : ""}${playing >= 0 ? " play" : ""}`}>
       <header className="isles-top">
-        <a href="/home" onClick={(event) => click(event, "/home", go)}>DevQuest</a>
-        <div className="g-xp" aria-label={`${mission.xp} XP`}><span style={{ width: `${Math.min(100, (mission.xp / 185) * 100)}%` }} /></div>
-        <b>{mission.xp}</b>
+        <a className="word" href="/home" onClick={(event) => click(event, "/home", go)}><span>Dev</span>Quest</a>
+        <span className="spacer" />
         {(playing >= 0 || path === "/win") && (
           <nav className="pips">
             {STAGES.map((stage, index) => (
@@ -359,6 +396,7 @@ export function Isles() {
             ))}
           </nav>
         )}
+        <b className="score">{mission.xp}</b>
         <button className="btn small ghost" aria-label={theme === "dark" ? "Light" : "Dark"} onClick={() => {
           const next = theme === "dark" ? "light" : "dark";
           setTheme(next);
@@ -367,15 +405,25 @@ export function Isles() {
       </header>
 
       {path === "/home" && (
-        <main className="desk">
-          <a className="world open" href={continueHref} onClick={(event) => click(event, continueHref, go)}>
-            <small>03</small>
-            <strong>Relay Isles</strong>
-            <em>{Math.min(mission.stage, 7)} / 7</em>
-          </a>
-          <article className="world done"><small>01</small><strong>Foundations</strong></article>
-          <article className="world done"><small>02</small><strong>Data & Logic</strong></article>
-          <article className="world shut"><small>04</small><strong>Locked</strong></article>
+        <main className="arena">
+          <p className="kicker">The arena</p>
+          <h1>Send it. <em>The island stamps it.</em></h1>
+          <a className="arena-go" href={continueHref} onClick={(event) => click(event, continueHref, go)}>{mission.stage === 0 ? "Enter the relay" : "Continue"}</a>
+          <a className="arena-alt" href="/map" onClick={(event) => click(event, "/map", go)}>Isles</a>
+          <Replay />
+          <div className="meters">
+            <article><small>Score</small><b>{mission.xp}</b></article>
+            <article><small>Cleared</small><b>{Math.min(mission.stage, 7)}<span>/7</span></b></article>
+            <article className="wide"><small>League</small><b>{league(mission.stage)}</b></article>
+          </div>
+          <div className="modes">
+            <a className="mode open" href={continueHref} onClick={(event) => click(event, continueHref, go)}>
+              <small>Open</small><strong>Relay Isles</strong><em>{Math.min(mission.stage, 7)} / 7</em>
+            </a>
+            <article className="mode done"><small>Done</small><strong>Foundations</strong></article>
+            <article className="mode done"><small>Done</small><strong>Data & Logic</strong></article>
+            <article className="mode shut"><small>Locked</small><strong>Next</strong></article>
+          </div>
         </main>
       )}
 
@@ -396,10 +444,8 @@ export function Isles() {
 
       {path === "/mission" && (
         <main className="brief">
-          <p className="kicker">Mission 01</p>
           <h1>Chai Port</h1>
-          <div className="chips"><span>GET</span><span>POST</span><span>200</span></div>
-          <a className="btn primary big" href="/play/1" onClick={(event) => click(event, "/play/1", go)}>Take the job</a>
+          <a className="btn amber big" href="/play/1" onClick={(event) => click(event, "/play/1", go)}>Dispatch</a>
         </main>
       )}
 
@@ -410,8 +456,8 @@ export function Isles() {
       {path === "/win" && mission.stage >= 7 && (
         <main className="brief">
           <p className="kicker">{mission.xp} XP</p>
-          <h1>Courier</h1>
-          <div className="chips">{STAGES.map((stage) => <span key={stage.name}>{stage.name}</span>)}</div>
+          <h1>Clear</h1>
+          <div className="chips">{STAGES.map((stage) => <span key={stage.name}>★</span>)}</div>
           <div className="row">
             <a className="btn primary" href="/play/1" onClick={(event) => click(event, "/play/1", go)}>Replay</a>
             <a className="btn ghost" href="/map" onClick={(event) => click(event, "/map", go)}>Isles</a>
@@ -495,71 +541,106 @@ function StagePlay({ index, onWin }: { index: number; onWin: () => void }) {
     }
   }
 
-  const line = spec.showCode
-    ? `chai.${method === "GET" ? "get" : "post"}("${resource}"${method === "POST" ? ", …)" : ")"}`
-    : "";
+  const slip = `chai.${method === "GET" ? "get" : "post"}("${resource}")`;
+  const crates = cargoOf(reply);
+  const slots = spec.showBody ? slotsOf(bodyText) : [];
+
+  function poke(key: string) {
+    try {
+      const data = JSON.parse(bodyText) as Record<string, unknown>;
+      if (key === "qty") data.qty = 2;
+      if (key === "note") data.note = "less sugar";
+      setBodyText(JSON.stringify(data, null, 2));
+    } catch {
+      miss();
+    }
+  }
 
   return (
-    <section className={`board ${shake ? "shake" : ""}`}>
-      <div className="board-head">
-        <p className="kicker">{stage.name}{!recallDone ? " · again" : ` · ${step + 1}/${stage.beats.length}`}</p>
-        <h2>{spec.goal}</h2>
-      </div>
-      <div className="board-split">
-        <div className="reply">
-          <div className={`seal ${status >= 500 ? "bad" : status >= 400 ? "warn" : status >= 200 ? "ok" : ""}`}>{status || "—"}</div>
-          <pre>{reply ? JSON.stringify(reply, null, 2) : ""}</pre>
+    <section className={`stage ${shake ? "shake" : ""}`}>
+      <div className={`sky ${spec.base === "lanterns.isle" ? "night" : ""}`}>
+        <div className={`parcel ${flying ? "fly" : ""}`}>
+          {spec.goal && <b>{spec.goal}</b>}
+          <em>{method} {resource || "/"}</em>
+          {spec.showCode && <code>{slip}</code>}
+          {slots.length > 0 && (
+            <div className="slots">
+              {slots.map((slot) => (
+                <button key={slot.key} type="button" disabled={spec.lock} onClick={() => poke(slot.key)}>{slot.value || "·"}</button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="island">
+          <i />
+          {status > 0 && <div className={`seal ${status >= 500 ? "bad" : status >= 400 ? "warn" : "ok"}`}>{status}</div>}
+          <div className="cargo">
+            {crates.map((item) => (
+              <article key={item.title + item.meta}><b>{item.title}</b>{item.meta && <span>{item.meta}</span>}</article>
+            ))}
+          </div>
           {spec.kind === "read" && spec.receipt && (
-            <div className="receipt">
+            <div className="cargo">
               {Object.entries(spec.receipt).map(([key, value]) => (
                 <button key={key} className={picked.includes(key) ? "on" : ""} onClick={() => {
                   const next = picked.includes(key) ? picked.filter((item) => item !== key) : [...picked, key];
                   setPicked(next);
                   const need = spec.pick ?? [];
                   if (need.length > 0 && need.every((item) => next.includes(item)) && next.length === need.length) advance();
-                }}><b>{key}</b><span>{value}</span></button>
+                }}>{value}</button>
               ))}
             </div>
           )}
         </div>
-        {spec.kind !== "read" && (
-          <form className="composer" onSubmit={(event) => { event.preventDefault(); void send(); }}>
-            <div className="verb-keys">
-              {spec.methods.map((verb) => (
-                <button key={verb} type="button" className={`key ${method === verb ? "on" : ""}`} disabled={spec.lock} onClick={() => setMethod(verb)}>{verb}</button>
-              ))}
-            </div>
-            <label className="path-line">
-              <span>{spec.base}</span>
-              <input value={resource} disabled={spec.lock} onChange={(event) => setResource(event.target.value.startsWith("/") || event.target.value === "" ? event.target.value : `/${event.target.value}`)} />
-            </label>
-            {!spec.lock && (
-              <div className="path-chips">
-                {spec.paths.map((item) => (
-                  <button key={item} type="button" className={resource === item ? "on" : status === 404 && item === "/teas" ? "hint" : ""} onClick={() => setResource(item)}>{item}</button>
-                ))}
-              </div>
-            )}
-            <div className="verb-keys">
-              {spec.showAuth && <button type="button" className={`key ${auth ? "on" : ""}`} disabled={spec.lock} onClick={() => setAuth((value) => !value)}>PASS</button>}
-              {spec.showJson && <button type="button" className={`key ${jsonOn ? "on" : ""}`} disabled={spec.lock} onClick={() => setJsonOn((value) => !value)}>JSON</button>}
-              {spec.showKettle && <button type="button" className={`key ${kettle ? "on" : ""}`} onClick={() => setKettle((value) => !value)}>KETTLE</button>}
-            </div>
-            {spec.showBody && (
-              <textarea value={bodyText} spellCheck={false} disabled={spec.lock} onChange={(event) => setBodyText(event.target.value)} />
-            )}
-            {spec.showCode && <code className="py">{line}</code>}
-            {spec.kind === "predict" && (
-              <div className="path-chips">
-                {spec.choices.map((code) => (
-                  <button key={code} type="button" className={guess === code ? "on" : ""} onClick={() => setGuess(code)}>{code}</button>
-                ))}
-              </div>
-            )}
-            <button className="btn primary big" type="submit" disabled={flying || (spec.kind === "predict" && !guess)}>Send</button>
-          </form>
-        )}
       </div>
+      {spec.kind !== "read" && (
+        <form className="hud" onSubmit={(event) => { event.preventDefault(); void send(); }}>
+          <div className="verb-keys">
+            {spec.methods.map((verb) => (
+              <button key={verb} type="button" className={`key ${method === verb ? "on" : ""}`} disabled={spec.lock} onClick={() => setMethod(verb)}>{verb}</button>
+            ))}
+          </div>
+          <div className="path-chips">
+            {spec.paths.map((item) => (
+              <button key={item} type="button" disabled={spec.lock} className={resource === item ? "on" : status === 404 && item === "/teas" ? "hint" : ""} onClick={() => setResource(item)}>{item}</button>
+            ))}
+          </div>
+          {spec.showAuth && <button type="button" className={`key ${auth ? "on" : ""}`} disabled={spec.lock} onClick={() => setAuth((value) => !value)}>PASS</button>}
+          {spec.showJson && <button type="button" className={`key ${jsonOn ? "on" : ""}`} disabled={spec.lock} onClick={() => setJsonOn((value) => !value)}>JSON</button>}
+          {spec.showKettle && <button type="button" className={`key ${kettle ? "on" : ""}`} onClick={() => setKettle((value) => !value)}>HOT</button>}
+          {spec.kind === "predict" && spec.choices.map((code) => (
+            <button key={code} type="button" className={`key ${guess === code ? "on" : ""}`} onClick={() => setGuess(code)}>{code}</button>
+          ))}
+          <button className="btn amber big" type="submit" disabled={flying || (spec.kind === "predict" && !guess)}>Dispatch</button>
+        </form>
+      )}
     </section>
   );
+}
+
+function cargoOf(reply: unknown) {
+  if (Array.isArray(reply)) {
+    return reply.map((item) => {
+      const row = item as { name?: string; price?: number; id?: number };
+      return { title: row.name ?? String(row.id ?? ""), meta: row.price ? String(row.price) : "" };
+    });
+  }
+  if (reply && typeof reply === "object") {
+    const row = reply as Record<string, unknown>;
+    if (row.error) return [];
+    if (typeof row.name === "string") return [{ title: row.name, meta: String(row.price ?? row.status ?? "") }];
+    if (typeof row.order_id === "string") return [{ title: String(row.name || row.order_id), meta: String(row.qty ?? row.status ?? "") }];
+    if (typeof row.rental_id === "string") return [{ title: String(row.rental_id), meta: String(row.return_by ?? "") }];
+    if (row.kettle) return [{ title: "Hot", meta: "" }];
+  }
+  return [];
+}
+
+function slotsOf(text: string) {
+  try {
+    const data = JSON.parse(text) as Record<string, unknown>;
+    return Object.entries(data).map(([key, value]) => ({ key, value: value === "" ? "" : String(value) }));
+  } catch {
+    return [];
+  }
 }
