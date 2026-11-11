@@ -703,16 +703,17 @@ html[data-theme="light"] .code { background: #1e1b2e; color: #f8f5ff; }
 .slots button { border: 0; background: #3b2a14; color: #f6e7c8; border-radius: 8px; padding: 4px 8px; font-family: var(--mono); }
 .stage .seal {
   position: absolute;
-  left: 50%;
-  top: 18%;
-  transform: translateX(-50%) rotate(-8deg);
-  font-size: 92px;
+  right: 8%;
+  top: 6%;
+  transform: rotate(-8deg);
+  font-size: 72px;
   text-shadow: 0 10px 0 rgba(0, 0, 0, 0.25);
   animation: slam .42s cubic-bezier(.2, 1.5, .3, 1) both;
+  z-index: 3;
 }
 @keyframes slam {
-  from { transform: translateX(-50%) rotate(-18deg) scale(1.8); opacity: 0; }
-  to { transform: translateX(-50%) rotate(-8deg) scale(1); opacity: 1; }
+  from { transform: rotate(-18deg) scale(1.8); opacity: 0; }
+  to { transform: rotate(-8deg) scale(1); opacity: 1; }
 }
 .cargo { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
 .cargo article { animation: crate .35s ease both; }
@@ -737,13 +738,49 @@ html[data-theme="light"] .code { background: #1e1b2e; color: #f8f5ff; }
   background: #0e1016;
 }
 .hud .big { flex: 1 0 100%; min-height: 52px; border-radius: 12px; background: #f5c518; color: #1a1404; font-weight: 700; }
+.parcel.back { animation: sail-back .7s ease; }
+@keyframes sail-back {
+  0% { transform: none; }
+  40% { transform: translate(min(34vw, 180px), -48px); }
+  100% { transform: none; }
+}
+.stage .seal small {
+  display: block;
+  font-family: var(--sans);
+  font-size: 15px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  text-shadow: none;
+}
+.docks { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+.docks button {
+  border: 1px solid rgba(255,255,255,.28);
+  background: rgba(0,0,0,.35);
+  color: #fff;
+  border-radius: 12px;
+  padding: 8px 10px;
+  min-width: 72px;
+  min-height: 44px;
+  display: grid;
+  text-align: left;
+}
+.docks button b { font-size: 16px; }
+.docks button span { font-family: var(--mono); font-size: 11px; opacity: .8; }
+.docks button.on { background: #f5c518; color: #1a1404; border-color: transparent; }
+.docks button.hint, .key.hint, .slots button.hint, .cargo button.hint, .hud .big.pulse {
+  animation: glow 1s ease-in-out infinite;
+}
+@keyframes glow {
+  50% { box-shadow: 0 0 0 4px rgba(245, 197, 24, .55); }
+}
 @media (prefers-reduced-motion: reduce) {
-  .parcel.fly, .stage .seal, .cargo article, .sky::after, .tape-line { animation: none; }
+  .parcel.fly, .parcel.back, .stage .seal, .cargo article, .sky::after, .tape-line,
+  .docks button.hint, .key.hint, .slots button.hint, .cargo button.hint, .hud .big.pulse { animation: none; }
 }
 @media (max-width: 800px) {
   .sky { min-height: 0; }
   .island { width: 70%; height: 42%; right: 4%; }
-  .parcel { width: 160px; left: 6%; bottom: 16%; }
+  .parcel { width: 160px; left: 6%; bottom: 46%; }
   .parcel b { font-size: 28px; }
 }
 
@@ -820,4 +857,211 @@ html[data-theme="light"] .code { background: #1e1b2e; color: #f8f5ff; }
 @media (max-width: 640px) {
   .tape-line { grid-template-columns: 56px 1fr; }
   .tape-line em { grid-column: 2; }
+}
+
+.book { position: absolute; left: 4%; top: 8%; z-index: 4; display: flex; gap: 6px; }
+.book span { width: 42px; height: 42px; border-radius: 50%; border: 2px dashed rgba(255,255,255,.7); display: grid; place-items: center; color: #1a1404; font-family: var(--serif); background: transparent; }
+.book span.got { background: #f5c518; border-style: solid; }
+.end { width: min(880px, calc(100% - 32px)); }
+.end img { width: 100%; height: 280px; object-fit: cover; border-radius: 18px; }
+.end h1 { font-size: clamp(48px, 8vw, 84px); }
+.poster { display: block; border-radius: 18px; overflow: hidden; border: 1px solid #2a2a2e; }
+.poster img { display: block; width: 100%; height: min(360px, 46vw); object-fit: cover; object-position: center 40%; }
+.sky {
+  background: #102033 url("/art/port-day.jpg") center 42% / cover no-repeat;
+}
+.sky.night { background-image: url("/art/port-night.jpg"); background-position: center 40%; }
+.sky::after { content: none; }
+.parcel {
+  left: 16%;
+  bottom: 4%;
+  width: 132px;
+  padding: 10px 12px;
+  background: rgba(28, 16, 8, 0.9);
+  border: 2px solid #f5c518;
+}
+.parcel b { font-size: 26px; }
+.sky > .docks {
+  position: absolute;
+  right: 3%;
+  bottom: 6%;
+  z-index: 4;
+  width: auto;
+  max-width: 52%;
+  justify-content: flex-end;
+}
+.stage-cargo {
+  position: absolute;
+  right: 5%;
+  bottom: 24%;
+  z-index: 4;
+}
+.stage .seal { right: 36%; top: 6%; font-size: 64px; }
+
+.title-screen {
+  position: relative;
+  height: calc(100vh - 88px);
+  margin: 0 16px 16px;
+  border-radius: 20px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.title-screen img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 35%; }
+.title-screen .veil { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(6,8,16,.15), rgba(6,8,16,.72)); }
+.title-copy { position: relative; z-index: 1; display: grid; justify-items: center; gap: 14px; text-align: center; padding: 24px; }
+.title-copy h1 { margin: 0; font-size: clamp(64px, 12vw, 128px); line-height: .9; color: #fff; text-shadow: 0 8px 0 rgba(0,0,0,.35); }
+.title-copy .arena-go { min-width: 220px; box-shadow: 0 8px 0 #8a6a08; }
+.title-copy .arena-go:active { transform: translateY(4px); box-shadow: 0 4px 0 #8a6a08; }
+.title-map { color: #f6e7c8; text-decoration: none; letter-spacing: .12em; text-transform: uppercase; font-size: 13px; }
+
+.map.worldmap {
+  position: relative;
+  display: block;
+  width: calc(100% - 32px);
+  height: calc(100vh - 100px);
+  margin: 0 auto 16px;
+  border-radius: 20px;
+  overflow: hidden;
+  background: #102033 url("/art/port-day.jpg") center 40% / cover no-repeat;
+}
+.map.worldmap .isle {
+  position: absolute;
+  width: 148px;
+  min-height: 0;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(8, 10, 16, .72);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.2);
+}
+.map.worldmap .isle.open { border-color: #f5c518; box-shadow: 0 0 0 6px rgba(245,197,24,.25); animation: glow 1.6s ease-in-out infinite; }
+.map.worldmap .isle b { font-size: 18px; }
+.map.worldmap .isle.shut { opacity: .55; }
+
+.sky { background-position: 72% 40%; }
+.sea { position: absolute; left: 0; right: 0; bottom: 0; height: 34%; z-index: 2; pointer-events: none; overflow: hidden; }
+.sea i {
+  position: absolute; left: -20%; height: 3px; width: 140%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.55), transparent);
+  animation: tide 4.5s linear infinite;
+}
+.sea i:nth-child(1) { bottom: 28%; }
+.sea i:nth-child(2) { bottom: 48%; animation-duration: 6s; opacity: .6; }
+.sea i:nth-child(3) { bottom: 68%; animation-duration: 8s; opacity: .35; }
+
+.hearts { position: absolute; left: 16px; top: 78px; z-index: 6; display: flex; gap: 6px; }
+.hearts span { width: 16px; height: 16px; background: rgba(255,255,255,.25); transform: rotate(45deg); border-radius: 2px 2px 8px 2px; }
+.hearts span.on { background: #ef4444; box-shadow: 0 0 10px #ef4444; }
+
+.quest {
+  position: absolute; left: 50%; top: 74px; transform: translateX(-50%);
+  z-index: 6; text-align: center; color: #fff;
+  background: rgba(8,10,16,.55); border: 1px solid rgba(245,197,24,.6);
+  border-radius: 14px; padding: 6px 16px; min-width: 140px;
+}
+.quest small { display: block; letter-spacing: .16em; text-transform: uppercase; font-size: 11px; color: #f5c518; }
+.quest b { font-family: var(--serif); font-size: 28px; font-weight: 560; }
+
+.xp-pop {
+  position: absolute; left: 46%; top: 28%; z-index: 7;
+  color: #f5c518; font-family: var(--serif); font-size: 28px;
+  animation: crate .8s ease both;
+  text-shadow: 0 4px 0 #1a1404;
+}
+
+.skiff {
+  position: absolute; left: 4%; bottom: 6%; z-index: 5; width: 250px;
+  animation: bob 2.4s ease-in-out infinite;
+  filter: drop-shadow(0 12px 0 rgba(0,0,0,.25));
+}
+.skiff.go { animation: row .85s cubic-bezier(.22,.8,.2,1) forwards; }
+.skiff.back { animation: row-back .7s ease; }
+@keyframes bob { 50% { transform: translateY(-10px) rotate(-1.5deg); } }
+@keyframes row { to { transform: translate(min(26vw, 240px), -36px) rotate(2deg); } }
+@keyframes row-back {
+  0% { transform: none; }
+  40% { transform: translate(120px, -20px) rotate(4deg); }
+  100% { transform: none; }
+}
+.courier { width: 250px; height: auto; display: block; }
+.courier .wake { fill: rgba(255,255,255,.28); }
+.courier .hull { fill: #6b3a1f; }
+.courier .plank { fill: none; stroke: #e7c48a; stroke-width: 3; }
+.courier .coat { fill: #1c140c; }
+.courier .face { fill: #f3c7a2; }
+.courier .hair { fill: #16120e; }
+.courier .streak, .courier .scarf { fill: none; stroke: #f5c518; stroke-width: 4; stroke-linecap: round; }
+.courier .scarf { animation: flutter 1.1s ease-in-out infinite; transform-origin: 118px 70px; }
+.courier .eye { fill: #1a1404; }
+.courier .oar { stroke: #e7c48a; stroke-width: 4; fill: #e7c48a; transform-origin: 156px 96px; animation: paddle 1s ease-in-out infinite; }
+.skiff.go .oar { animation-duration: .28s; }
+@keyframes flutter { 50% { transform: rotate(8deg); } }
+@keyframes paddle { 50% { transform: rotate(-18deg); } }
+.skiff .parcel { position: relative; left: 18px; bottom: auto; width: 132px; margin-top: -28px; z-index: 2; pointer-events: auto; }
+
+.stage.shake { animation: hit .36s linear; }
+@keyframes hit {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-10px); }
+  75% { transform: translateX(10px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skiff, .skiff.go, .skiff.back, .courier .scarf, .courier .oar, .sea i, .stage.shake, .xp-pop, .map.worldmap .isle.open { animation: none; }
+}
+
+.isles.play .isles-top {
+  position: absolute; left: 0; right: 0;
+  background: linear-gradient(#07080c, transparent);
+}
+.isles.play .stage { padding: 0; }
+.isles.play .sky { border-radius: 0; background-position: 28% 46%; }
+.sky .hud {
+  position: absolute; left: 16px; right: 16px; bottom: 14px; z-index: 6;
+  background: rgba(8, 10, 16, .78);
+  backdrop-filter: blur(8px);
+}
+.sky > .parcel { left: 11%; bottom: 30%; z-index: 5; }
+.parcel.fly { animation: sail 1.15s cubic-bezier(.22, .8, .2, 1) forwards; }
+@keyframes sail { to { transform: translate(min(42vw, 460px), -24px); } }
+.sky > .docks { bottom: 176px; }
+.stage-cargo { bottom: 42%; }
+.sea i { opacity: .28; }
+.hearts span { width: auto; height: auto; transform: none; border-radius: 0; background: none; color: rgba(255,255,255,.28); font-size: 22px; line-height: 1; }
+.hearts span.on { background: none; color: #ef4444; box-shadow: none; text-shadow: 0 0 8px #ef4444; }
+
+/* Responsive polish (laptop + mobile) */
+.title-screen { height: calc(100dvh - 88px); }
+.map.worldmap { height: calc(100dvh - 100px); }
+.sky .hud { bottom: calc(14px + env(safe-area-inset-bottom)); }
+
+@media (max-width: 520px) {
+  .isles-top { padding: 12px 14px; gap: 10px; }
+  .isles-top .word { font-size: 24px; }
+  .score { font-size: 18px; }
+
+  .pips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
+  .pips::-webkit-scrollbar { display: none; }
+  .pip { width: 32px; height: 32px; }
+
+  .title-screen { margin: 0; border-radius: 0; height: calc(100dvh - 72px); }
+  .title-copy { padding: 18px; gap: 12px; }
+  .title-copy h1 { font-size: clamp(54px, 16vw, 92px); }
+  .title-copy .arena-go { min-width: 0; width: min(320px, calc(100vw - 48px)); }
+
+  .map.worldmap { width: 100%; border-radius: 0; height: calc(100dvh - 72px); }
+  .map.worldmap .isle { width: 122px; padding: 9px 10px; border-radius: 14px; }
+  .map.worldmap .isle b { font-size: 16px; }
+
+  .quest { top: 66px; padding: 6px 12px; }
+  .quest b { font-size: 22px; }
+  .hearts { top: 66px; left: 12px; }
+
+  .sky .hud { left: 10px; right: 10px; padding: 10px; }
+  .key { padding: 10px 12px; }
+
+  .sky > .parcel { left: 10px; bottom: 210px; }
+  .sky > .docks { right: 10px; bottom: 210px; max-width: 60%; }
+  .stage-cargo { right: 10px; bottom: 52%; }
 }
