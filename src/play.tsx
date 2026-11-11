@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { chooseCity, clearLevel, getPlayer, migrate, resetShelf, saveTheme, sendShelf, type Save } from "./api";
 
 type Skin = {
@@ -51,6 +51,29 @@ function rank(xp: number) {
   return "Bronze";
 }
 
+function normalize(pathname: string) {
+  const path = pathname || "/";
+  return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+}
+
+function useRoute() {
+  const [path, setPath] = useState(() => normalize(window.location.pathname));
+  useEffect(() => {
+    const sync = () => setPath(normalize(window.location.pathname));
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+  const go = useCallback((next: string, replace = false) => {
+    const clean = normalize(next);
+    if (window.location.pathname !== clean) {
+      const change = replace ? window.history.replaceState : window.history.pushState;
+      change.call(window.history, {}, "", clean);
+    }
+    setPath(clean);
+  }, []);
+  return { path, go };
+}
+
 function fresh(skin: Skin): World {
   return {
     shelf: [
@@ -88,12 +111,13 @@ function apply(world: World, verb: Verb, target: string, jam: boolean, skin: Ski
 export function RelayGame() {
   const [boot] = useState(load);
   const [save, setSave] = useState<Save>(boot);
-  const [phase, setPhase] = useState<"title" | "cast" | "play" | "win">(
-    boot.skin ? (boot.cleared >= LEVELS.length ? "win" : "play") : "title",
-  );
-  const [playing, setPlaying] = useState(Math.min(boot.cleared, LEVELS.length - 1));
+  const [known, setKnown] = useState(false);
   const [pop, setPop] = useState("");
   const touched = useRef(false);
+  const { path, go } = useRoute();
+  const levelNo = /^\/play\/([1-7])$/.exec(path);
+  const playing = levelNo ? Number(levelNo[1]) - 1 : -1;
+  const continueHref = !save.skin ? "/city" : save.cleared >= LEVELS.length ? "/win" : `/play/${save.cleared + 1}`;
 
   useEffect(() => {
     localStorage.setItem(KEY, JSON.stringify(save));
@@ -111,16 +135,45 @@ export function RelayGame() {
         }
         if (!live || touched.current) return;
         setSave(remote);
-        setPlaying(Math.min(remote.cleared, LEVELS.length - 1));
-        if (remote.skin) setPhase(remote.cleared >= LEVELS.length ? "win" : "play");
       } catch {
         /* this browser keeps the last round if the API is down */
+      } finally {
+        if (live) setKnown(true);
       }
     })();
     return () => {
       live = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (path === "/") {
+      go("/home", true);
+      return;
+    }
+    if (!known) return;
+    const knownPage = path === "/home" || path === "/city" || path === "/win" || playing >= 0;
+    if (!knownPage) {
+      go("/home", true);
+      return;
+    }
+    if ((playing >= 0 || path === "/win") && !save.skin) {
+      go("/city", true);
+      return;
+    }
+    if (playing > save.cleared) {
+      go(`/play/${save.cleared + 1}`, true);
+      return;
+    }
+    if (path === "/win" && save.cleared < LEVELS.length) {
+      go(`/play/${save.cleared + 1}`, true);
+    }
+  }, [path, playing, save.skin, save.cleared, known, go]);
+
+  useEffect(() => {
+    const name = path === "/city" ? "City" : path === "/win" ? "REST" : playing >= 0 ? LEVELS[playing].name : "Home";
+    document.title = `DevQuest · ${name}`;
+  }, [path, playing]);
 
   useEffect(() => {
     if (!pop) return;
@@ -143,30 +196,35 @@ export function RelayGame() {
       };
     });
     setPop(first ? `+${LEVELS[index].xp}` : "");
-    if (index + 1 >= LEVELS.length) setPhase("win");
-    else setPlaying(index + 1);
+    go(index + 1 >= LEVELS.length ? "/win" : `/play/${index + 2}`);
     void clearLevel(index)
       .then((remote) => setSave({ skin: remote.skin, cleared: remote.cleared, xp: remote.xp, words: remote.words, theme: remote.theme }))
       .catch(() => {});
   }
 
-  function openLevel(index: number) {
-    if (index > save.cleared) return;
-    setPlaying(index);
-    setPhase("play");
+  function click(event: { preventDefault(): void; metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; button: number }, href: string) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    event.preventDefault();
+    go(href);
   }
+
+  const playOk = playing >= 0 && Boolean(save.skin) && playing <= save.cleared;
+  const winOk = path === "/win" && Boolean(save.skin) && save.cleared >= LEVELS.length;
 
   return (
     <div className="arena-app">
-      {phase === "title" && (
+      {(path === "/" || path === "/home") && (
         <main className="gate">
           <p className="kicker">DevQuest</p>
           <h1>Helix Relay</h1>
           <div className="mini-town" aria-hidden="true"><i /><i /><i /></div>
-          <button className="btn amber big" onClick={() => setPhase("cast")}>Play</button>
+          <div className="row">
+            <a className="btn amber big" href={continueHref} onClick={(event) => click(event, continueHref)}>Play</a>
+            <a className="btn ghost" href="/city" onClick={(event) => click(event, "/city")}>Cities</a>
+          </div>
         </main>
       )}
-      {phase === "cast" && (
+      {path === "/city" && (
         <main className="gate">
           <p className="kicker">City</p>
           <div className="cast-grid">
@@ -175,12 +233,10 @@ export function RelayGame() {
                 touched.current = true;
                 void chooseCity(s.id).then((next) => {
                   setSave(next);
-                  setPlaying(0);
-                  setPhase("play");
+                  go("/play/1");
                 }).catch(() => {
                   setSave((prev) => ({ ...prev, skin: s.id, cleared: 0, xp: 0, words: [] }));
-                  setPlaying(0);
-                  setPhase("play");
+                  go("/play/1");
                 });
               }}>
                 <span className="mini-town"><i /><i /><i /></span>
@@ -189,16 +245,21 @@ export function RelayGame() {
               </button>
             ))}
           </div>
+          <a className="btn ghost" href="/home" onClick={(event) => click(event, "/home")}>Home</a>
         </main>
       )}
-      {(phase === "play" || phase === "win") && (
+      {(playOk || winOk) && (
         <header className="g-top">
-          <strong>DQ</strong>
+          <a className="brand" href="/home" onClick={(event) => click(event, "/home")}>DQ</a>
           <div className="pips">
             {LEVELS.map((level, i) => (
-              <button key={level.name} className={`pip ${i < save.cleared ? "done" : ""} ${phase === "play" && i === playing ? "now" : ""}`} disabled={i > save.cleared} onClick={() => openLevel(i)}>
-                {i < save.cleared ? "★" : i + 1}
-              </button>
+              i > save.cleared ? (
+                <span key={level.name} className="pip locked">{i + 1}</span>
+              ) : (
+                <a key={level.name} className={`pip ${i < save.cleared ? "done" : ""} ${playOk && i === playing ? "now" : ""}`} href={`/play/${i + 1}`} onClick={(event) => click(event, `/play/${i + 1}`)}>
+                  {i < save.cleared ? "★" : i + 1}
+                </a>
+              )
             ))}
             <span className="pip locked">8</span>
           </div>
@@ -212,17 +273,17 @@ export function RelayGame() {
           }}>{save.theme === "dark" ? "Light" : "Dark"}</button>
         </header>
       )}
-      {phase === "play" && (
+      {playOk && (
         <Run key={`${skin.id}-${playing}`} index={playing} skin={skin} onWin={() => finish(playing)} />
       )}
-      {phase === "win" && (
+      {winOk && (
         <main className="gate">
           <p className="kicker">{rank(save.xp)} · {save.xp} XP</p>
           <h1>REST</h1>
           <div className="chips">{save.words.map((w) => <span key={w} className="chip">{w}</span>)}</div>
           <div className="row">
-            <button className="btn primary" onClick={() => openLevel(0)}>Replay</button>
-            <button className="btn ghost" onClick={() => { touched.current = true; setSave((s) => ({ ...s, skin: "", cleared: 0, xp: 0, words: [] })); setPhase("title"); void chooseCity("").catch(() => {}); }}>New city</button>
+            <a className="btn primary" href="/play/1" onClick={(event) => click(event, "/play/1")}>Replay</a>
+            <a className="btn ghost" href="/city" onClick={(event) => { touched.current = true; setSave((s) => ({ ...s, skin: "", cleared: 0, xp: 0, words: [] })); void chooseCity("").catch(() => {}); click(event, "/city"); }}>New city</a>
           </div>
         </main>
       )}
