@@ -38,6 +38,19 @@ db.exec(`
     xp INTEGER NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+  CREATE TABLE IF NOT EXISTS mission (
+    player_id TEXT PRIMARY KEY,
+    stage INTEGER NOT NULL DEFAULT 0,
+    xp INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS deliveries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id TEXT NOT NULL,
+    method TEXT NOT NULL,
+    path TEXT NOT NULL,
+    status INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 if (!db.prepare("PRAGMA table_info(players)").all().some((col) => col.name === "opened")) {
   db.exec("ALTER TABLE players ADD COLUMN opened INTEGER NOT NULL DEFAULT 0");
@@ -52,6 +65,16 @@ const SKINS = {
 };
 const XP = [20, 20, 25, 20, 25, 20, 40];
 const WORDS = ["PATH", "GET", "PATCH", "404", "JSON", "POST", "REST"];
+const STAGE_XP = [20, 25, 30, 20, 25, 25, 40];
+const TEAS = [
+  { id: 12, name: "Masala", price: 30 },
+  { id: 7, name: "Ginger", price: 25 },
+  { id: 3, name: "Mint", price: 20 },
+];
+const LANTERNS = [
+  { id: 7, name: "Moon" },
+  { id: 2, name: "Star" },
+];
 const PLAYER = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function skinOf(id) {
@@ -156,6 +179,46 @@ function tx(run) {
     db.exec("ROLLBACK");
     throw error;
   }
+}
+
+function missionOf(id) {
+  let row = db.prepare("SELECT stage, xp FROM mission WHERE player_id = ?").get(id);
+  if (!row) {
+    db.prepare("INSERT INTO mission (player_id) VALUES (?)").run(id);
+    row = { stage: 0, xp: 0 };
+  }
+  return { stage: row.stage, xp: row.xp };
+}
+
+function relay(method, resource, headers, body) {
+  const path = (resource || "/").split("?")[0];
+  const auth = headers.authorization === "Bearer PASS";
+  const json = String(headers["content-type"] || "").includes("application/json");
+  if (method === "GET" && path === "/teas") return { status: 200, body: TEAS };
+  if (method === "GET" && path.startsWith("/teas/")) {
+    const tea = TEAS.find((item) => item.id === Number(path.slice("/teas/".length)));
+    return tea ? { status: 200, body: tea } : { status: 404, body: { error: "NO_SUCH_TEA" } };
+  }
+  if (method === "GET" && path === "/kettle") {
+    if (headers["x-kettle"] === "1") return { status: 200, body: { kettle: "hot" } };
+    return { status: 500, body: { error: "KETTLE" } };
+  }
+  if (method === "GET" && path === "/orders/A42") return { status: 200, body: { id: "A42", status: "brewing" } };
+  if (method === "POST" && path === "/orders") {
+    if (!auth) return { status: 401, body: { error: "NO_PASS" } };
+    if (!json) return { status: 400, body: { error: "NO_STICKER" } };
+    if (!body || typeof body.qty !== "number") return { status: 400, body: { error: "MISSING_FIELD", field: "qty" } };
+    if (body.tea_id === undefined || typeof body.name !== "string") return { status: 400, body: { error: "MISSING_FIELD" } };
+    return { status: 201, body: { order_id: "A42", status: "brewing", tea_id: body.tea_id, qty: body.qty, name: body.name, note: body.note || "" } };
+  }
+  if (method === "GET" && path === "/lanterns") return { status: 200, body: LANTERNS };
+  if (method === "POST" && path === "/rentals") {
+    if (!auth) return { status: 401, body: { error: "NO_PASS" } };
+    if (!json) return { status: 400, body: { error: "NO_STICKER" } };
+    if (!body || typeof body.days !== "number" || body.lantern_id === undefined) return { status: 400, body: { error: "MISSING_FIELD" } };
+    return { status: 201, body: { rental_id: "L9", lantern_id: body.lantern_id, days: body.days, return_by: `Festival day ${body.days}` } };
+  }
+  return { status: 404, body: { error: "NO_SUCH_SHELF" } };
 }
 
 function shelfResult(status, stamp, shelf, inbox) {
@@ -268,6 +331,31 @@ const server = http.createServer((req, res) => {
         if (skin) seed(id, skinOf(skin), false);
       });
       send(res, 200, view(ensure(id)));
+      return;
+    }
+
+    if (path === "/api/relay" || path.startsWith("/api/relay/")) {
+      const resource = path.slice("/api/relay".length) || "/";
+      const result = relay(req.method || "GET", resource, req.headers, body);
+      db.prepare("INSERT INTO deliveries (player_id, method, path, status) VALUES (?, ?, ?, ?)").run(id, req.method || "GET", resource, result.status);
+      send(res, result.status, result.body);
+      return;
+    }
+
+    if (req.method === "GET" && path === "/api/mission") {
+      send(res, 200, missionOf(id));
+      return;
+    }
+
+    if (req.method === "POST" && path === "/api/mission/clear") {
+      const index = Number(body.index);
+      const current = missionOf(id);
+      if (!Number.isInteger(index) || index !== current.stage || index < 0 || index >= STAGE_XP.length) {
+        send(res, 409, { ...current, awarded: false });
+        return;
+      }
+      db.prepare("UPDATE mission SET stage = ?, xp = xp + ? WHERE player_id = ?").run(index + 1, STAGE_XP[index], id);
+      send(res, 200, { ...missionOf(id), awarded: true });
       return;
     }
 

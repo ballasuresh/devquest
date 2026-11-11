@@ -45,12 +45,6 @@ function load(): Save {
   }
 }
 
-function rank(xp: number) {
-  if (xp >= 160) return "Gold";
-  if (xp >= 80) return "Silver";
-  return "Bronze";
-}
-
 function normalize(pathname: string) {
   const path = pathname || "/";
   return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
@@ -171,9 +165,8 @@ export function RelayGame() {
   }, [path, playing, save.skin, save.cleared, known, go]);
 
   useEffect(() => {
-    const name = path === "/city" ? "City" : path === "/win" ? "REST" : playing >= 0 ? LEVELS[playing].name : "Home";
-    document.title = `DevQuest · ${name}`;
-  }, [path, playing]);
+    document.title = "DevQuest";
+  }, []);
 
   useEffect(() => {
     if (!pop) return;
@@ -215,21 +208,19 @@ export function RelayGame() {
     <div className="arena-app">
       {(path === "/" || path === "/home") && (
         <main className="gate">
-          <p className="kicker">DevQuest</p>
-          <h1>Helix Relay</h1>
-          <div className="mini-town" aria-hidden="true"><i /><i /><i /></div>
-          <div className="row">
-            <a className="btn amber big" href={continueHref} onClick={(event) => click(event, continueHref)}>Play</a>
-            <a className="btn ghost" href="/city" onClick={(event) => click(event, "/city")}>Cities</a>
-          </div>
+          <a className="town-go" href={continueHref} aria-label="Play" onClick={(event) => click(event, continueHref)}>
+            <span className="mini-town big-town"><i /><i /><i /></span>
+          </a>
+          <a className="swatches" href="/city" aria-label="Cities" onClick={(event) => click(event, "/city")}>
+            <i data-skin="market" /><i data-skin="clinic" /><i data-skin="dock" /><i data-skin="bay" />
+          </a>
         </main>
       )}
       {path === "/city" && (
         <main className="gate">
-          <p className="kicker">City</p>
           <div className="cast-grid">
             {SKINS.map((s) => (
-              <button key={s.id} className="city-pick" data-skin={s.id} onClick={() => {
+              <button key={s.id} className="city-pick" data-skin={s.id} aria-label={s.place} onClick={() => {
                 touched.current = true;
                 void chooseCity(s.id).then((next) => {
                   setSave(next);
@@ -240,17 +231,15 @@ export function RelayGame() {
                 });
               }}>
                 <span className="mini-town"><i /><i /><i /></span>
-                <strong>{s.hero}</strong>
-                <em>{s.place}</em>
               </button>
             ))}
           </div>
-          <a className="btn ghost" href="/home" onClick={(event) => click(event, "/home")}>Home</a>
+          <a className="btn ghost" href="/home" aria-label="Home" onClick={(event) => click(event, "/home")}>←</a>
         </main>
       )}
       {(playOk || winOk) && (
         <header className="g-top">
-          <a className="brand" href="/home" onClick={(event) => click(event, "/home")}>DQ</a>
+          <a className="brand" href="/home" aria-label="Home" onClick={(event) => click(event, "/home")}><span className="mini-town"><i /><i /><i /></span></a>
           <div className="pips">
             {LEVELS.map((level, i) => (
               i > save.cleared ? (
@@ -264,13 +253,12 @@ export function RelayGame() {
             <span className="pip locked">8</span>
           </div>
           <div className="g-xp" aria-label={`${save.xp} XP`}><span style={{ width: `${Math.min(100, (save.xp / 170) * 100)}%` }} /></div>
-          <b>{rank(save.xp)}</b>
-          <button className="btn small ghost" onClick={() => {
+          <button className="btn small ghost" aria-label={save.theme === "dark" ? "Light" : "Dark"} onClick={() => {
             touched.current = true;
             const theme = save.theme === "dark" ? "light" : "dark";
             setSave((s) => ({ ...s, theme }));
             void saveTheme(theme).catch(() => {});
-          }}>{save.theme === "dark" ? "Light" : "Dark"}</button>
+          }}>{save.theme === "dark" ? "☀" : "☾"}</button>
         </header>
       )}
       {playOk && (
@@ -278,12 +266,10 @@ export function RelayGame() {
       )}
       {winOk && (
         <main className="gate">
-          <p className="kicker">{rank(save.xp)} · {save.xp} XP</p>
-          <h1>REST</h1>
           <div className="chips">{save.words.map((w) => <span key={w} className="chip">{w}</span>)}</div>
           <div className="row">
-            <a className="btn primary" href="/play/1" onClick={(event) => click(event, "/play/1")}>Replay</a>
-            <a className="btn ghost" href="/city" onClick={(event) => { touched.current = true; setSave((s) => ({ ...s, skin: "", cleared: 0, xp: 0, words: [] })); void chooseCity("").catch(() => {}); click(event, "/city"); }}>New city</a>
+            <a className="btn primary" href="/play/1" aria-label="Replay" onClick={(event) => click(event, "/play/1")}>↺</a>
+            <a className="btn ghost" href="/city" aria-label="Cities" onClick={(event) => { touched.current = true; setSave((s) => ({ ...s, skin: "", cleared: 0, xp: 0, words: [] })); void chooseCity("").catch(() => {}); click(event, "/city"); }}><span className="mini-town"><i /><i /><i /></span></a>
           </div>
         </main>
       )}
@@ -293,7 +279,6 @@ export function RelayGame() {
 }
 
 function Run({ index, skin, onWin }: { index: number; skin: Skin; onWin: () => void }) {
-  const level = LEVELS[index];
   const [world, setWorld] = useState<World>(() => (index === 5 ? { shelf: [], inbox: [], stamp: "" } : fresh(skin)));
   const [verb, setVerb] = useState<Verb | "">(index === 0 || index === 3 ? "GET" : "");
   const [target, setTarget] = useState(index === 1 || index === 2 ? skin.n : index === 5 ? "new" : "");
@@ -393,7 +378,6 @@ function Run({ index, skin, onWin }: { index: number; skin: Skin; onWin: () => v
   }
 
   const cmd = command(verb, target, skin);
-  const focus = world.shelf.find((c) => c.id === skin.n);
 
   return (
     <section className={`split ${shake ? "shake" : ""}`} data-skin={skin.id}>
@@ -408,7 +392,7 @@ function Run({ index, skin, onWin }: { index: number; skin: Skin; onWin: () => v
           <div className="shelf">
             {index === 5 && world.shelf.length === 0 && <div className="door ghost">+</div>}
             {world.shelf.map((c) => (
-              <button key={c.id} className={`door ${target === c.id ? "active" : ""} ${c.on ? "lit" : ""}`} disabled={lockTarget || index === 4} onClick={() => setTarget(c.id)}>
+              <button key={c.id} className={`door ${target === c.id ? "active" : ""} ${c.on ? "lit" : ""} ${index === 0 && c.id === skin.n ? "hint" : ""}`} disabled={lockTarget || index === 4} onClick={() => setTarget(c.id)}>
                 <i className="lamp" />
                 <b>{c.id}</b>
                 <em className={c.owner ? "" : "gone"}>{c.owner || "—"}</em>
@@ -436,8 +420,6 @@ function Run({ index, skin, onWin }: { index: number; skin: Skin; onWin: () => v
             <span className="lives">{"♥".repeat(hearts)}{"♡".repeat(3 - hearts)}</span>
           </div>
         )}
-        {index === 2 && focus && <p className="goal">{focus.owner ? skin.owner : "—"} · {focus.on ? "on" : "off"}</p>}
-        {index !== 2 && <p className="goal">{level.goal(skin)}</p>}
       </div>
       <div className="dock">
         {index === 4 ? (
@@ -448,8 +430,8 @@ function Run({ index, skin, onWin }: { index: number; skin: Skin; onWin: () => v
               ))}
             </div>
             <button className="btn ghost" onClick={() => { setScribble(true); setSlots([]); }}>~~~</button>
-            {scribble && <button className="btn ghost" onClick={() => setScribble(false)}>Reset</button>}
-            <button className="btn amber big" disabled={slots.length < 3 || scribble} onClick={onWin}>Next</button>
+            {scribble && <button className="btn ghost" aria-label="Reset" onClick={() => setScribble(false)}>↺</button>}
+            <button className="btn amber big" aria-label="Next" disabled={slots.length < 3 || scribble} onClick={onWin}>▶</button>
           </div>
         ) : (
           <>
@@ -465,7 +447,7 @@ function Run({ index, skin, onWin }: { index: number; skin: Skin; onWin: () => v
             )}
             <div className="row">
               {!won && <button className="btn ghost" onClick={reset}>↺</button>}
-              {won ? <button className="btn amber big" onClick={onWin}>Next</button> : <button className="btn primary big" disabled={!verb || !target || flying || !live} onClick={() => void fire()}>Send</button>}
+              {won ? <button className="btn amber big" aria-label="Next" onClick={onWin}>▶</button> : <button className="btn primary big" aria-label="Send" disabled={!verb || !target || flying || !live} onClick={() => void fire()}>▶</button>}
             </div>
           </>
         )}

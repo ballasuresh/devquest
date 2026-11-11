@@ -1,5 +1,5 @@
-import { RelayGame } from "./play";
+import { Isles } from "./isles";
 
 export function App() {
-  return <RelayGame />;
+  return <Isles />;
 }

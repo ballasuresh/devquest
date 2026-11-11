@@ -52,6 +52,37 @@ export async function resetShelf(empty: boolean): Promise<World> {
   return take(await fetch("/api/shelves/reset", { method: "POST", headers: headers(true), body: JSON.stringify({ empty }) }));
 }
 
+export type Mission = { stage: number; xp: number };
+
+export async function getMission(): Promise<Mission> {
+  return take(await fetch("/api/mission", { headers: headers() }));
+}
+
+export async function clearMission(index: number): Promise<Mission & { awarded: boolean }> {
+  const res = await fetch("/api/mission/clear", { method: "POST", headers: headers(true), body: JSON.stringify({ index }) });
+  const data = (await res.json()) as Mission & { awarded: boolean };
+  if (!res.ok && res.status !== 409) throw new Error(String(res.status));
+  return data;
+}
+
+export async function relay(
+  method: string,
+  path: string,
+  opts: { auth?: boolean; json?: boolean; body?: unknown; kettle?: boolean },
+): Promise<{ status: number; body: unknown }> {
+  const head = headers(false) as Record<string, string>;
+  if (opts.auth) head.Authorization = "Bearer PASS";
+  if (opts.json) head["Content-Type"] = "application/json";
+  if (opts.kettle) head["X-Kettle"] = "1";
+  const res = await fetch(`/api/relay${path}`, {
+    method,
+    headers: head,
+    body: method === "GET" ? undefined : JSON.stringify(opts.body ?? {}),
+  });
+  const data = (await res.json().catch(() => ({}))) as unknown;
+  return { status: res.status, body: data };
+}
+
 export async function sendShelf(verb: string, target: string, jam: boolean, light: string): Promise<World> {
   const head = headers(verb !== "GET") as Record<string, string>;
   if (jam) head["X-Jam"] = "1";
