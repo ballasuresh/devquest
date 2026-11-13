@@ -1,13 +1,18 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { Arena } from "./action/Arena";
 import { Dials } from "./dials";
 import { Unfinished } from "./unfinished";
 import { WorldHub, type HubMission } from "./ui/WorldHub";
 import type { Difficulty } from "./game/types";
 
-export function App() {
-  const [view, setView] = useState<HubMission | "hub">("hub");
-  const [difficulty, setDifficulty] = useState<Difficulty>("guided");
+type View = "arena" | "hub" | HubMission;
 
+export function App() {
+  const [view, setView] = useState<View>("arena");
+  const [difficulty, setDifficulty] = useState<Difficulty>("guided");
+  const toAcademy = useCallback(() => setView("hub"), []);
+
+  if (view === "arena") return <Arena onAcademy={toAcademy} />;
   if (view === "line") {
     return (
       <Unfinished
@@ -21,11 +26,16 @@ export function App() {
     return <Dials difficulty={difficulty} onMap={() => setView("hub")} />;
   }
   return (
-    <WorldHub
-      onEnter={(id, mode) => {
-        setDifficulty(mode);
-        setView(id);
-      }}
-    />
+    <div className="academy-wrap">
+      <button className="btn academy-back" type="button" onClick={() => setView("arena")}>
+        Back to the fight
+      </button>
+      <WorldHub
+        onEnter={(id, mode) => {
+          setDifficulty(mode);
+          setView(id);
+        }}
+      />
+    </div>
   );
 }
