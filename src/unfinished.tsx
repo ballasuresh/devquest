@@ -5,6 +5,7 @@ import { rankFromAttempts, rewardFor } from "./game/rank";
 import { DEMO_CHUNKS, keepLine } from "./game/lineKeeper";
 import { Hud } from "./ui/Hud";
 import { Effects, useFx } from "./ui/Effects";
+import { EmojiAnswers, Mascot, CartoonProgress, ThermoGauge, StreamGraph, emojiFor } from "./ui/quiz";
 
 
 const SAVE = "dq-m35";
@@ -613,8 +614,7 @@ function UnfinishedInner({ onMap, onNext, difficulty }: { onMap?: () => void; on
           <h1>The Unfinished Line</h1>
           <p className="who">{save.avatar ? `${save.avatar} · ops floor` : "Same path for every avatar."}</p>
           <div className="mentor">
-            <div className={`orb ${save.ai ? "on" : "off"}`} aria-hidden />
-            <p className="vyapti">{hints ? note : "Quiet isn't the same as done. Tap the next honest move."}</p>
+            <Mascot mood={flash === "good" ? "happy" : flash === "bad" ? "sad" : "think"} line={hints ? note : "Quiet isn't the same as done. Tap the next honest move."} />
           </div>
           {save.difficulty !== "ranked" && (
             <label className="toggle">
@@ -623,6 +623,15 @@ function UnfinishedInner({ onMap, onNext, difficulty }: { onMap?: () => void; on
             </label>
           )}
           <p className="xp-chip"><strong>{save.xp}</strong> XP · {save.coins} coins</p>
+          <CartoonProgress items={[
+            { name: "Clues", have: save.clues.length, total: CLUES.length, emoji: "🔍" },
+            { name: "Scope", have: save.checks.filter(Boolean).length, total: STEPS.length, emoji: "📡" },
+            { name: "Chats", have: save.chats.length, total: CHATS.length, emoji: "💬" },
+            { name: "Calls", have: save.preds.filter((p) => typeof p === "number").length, total: PREDS.length, emoji: "🔮" },
+            { name: "Blanks", have: BLANKS.filter((b, i) => save.blanks[i] === b.answer).length, total: BLANKS.length, emoji: "🧩" },
+            { name: "Bugs", have: save.bugs.filter(Boolean).length, total: BUGS.length, emoji: "🐛" },
+            { name: "Board", have: save.phase, total: 3, emoji: "🛡️" },
+          ]} />
         </aside>
         <main className="stage">
           {save.stage === "pick" && (
@@ -670,38 +679,36 @@ function UnfinishedInner({ onMap, onNext, difficulty }: { onMap?: () => void; on
                   <button
                     key={clue.id}
                     type="button"
-                    className={`card ${save.clues.includes(clue.id) ? "on" : ""}`}
+                    className={`card clue-card emoji-card ${save.clues.includes(clue.id) ? "on good" : ""}`}
                     onClick={() => {
                       const clues = save.clues.includes(clue.id) ? save.clues : [...save.clues, clue.id];
                       patch({ clues });
                       setNote(`${clue.body} ${clue.line}`);
                     }}
                   >
+                    <span className="emoji-face" aria-hidden>{emojiFor(clue.title)}</span>
                     <strong>{clue.title}</strong>
-                    <span>{save.clues.includes(clue.id) ? clue.body : "Tap to inspect"}</span>
+                    <span className="emoji-label">{save.clues.includes(clue.id) ? clue.body : "Tap to inspect"}</span>
                   </button>
                 ))}
               </div>
               {save.clues.length >= 3 && !save.asked && (
                 <fieldset className="ask">
                   <legend>What's actually wrong?</legend>
-                  {["The bot crashed.", "The reply stopped and nobody checked whether it finished.", "The customer's internet is slow."].map((choice) => (
-                    <button
-                      key={choice}
-                      type="button"
-                      className="btn ghost"
-                      onClick={() => {
-                        if (!choice.startsWith("The reply")) {
-                          damage("Close — but the crash isn't the story. The reply stopped, and the board still said all good.");
-                          return;
-                        }
-                        award(5, "Exactly. Let's read the commentary properly.");
-                        patch({ asked: true });
-                      }}
-                    >
-                      {choice}
-                    </button>
-                  ))}
+                  <EmojiAnswers
+                    name="What's actually wrong?"
+                    choices={["The bot crashed.", "The reply stopped and nobody checked whether it finished.", "The customer's internet is slow."]}
+                    onPick={(index) => {
+                      const choice = ["The bot crashed.", "The reply stopped and nobody checked whether it finished.", "The customer's internet is slow."][index];
+                      if (!choice.startsWith("The reply")) {
+                        damage("Close — but the crash isn't the story. The reply stopped, and the board still said all good.");
+                        return false;
+                      }
+                      award(5, "Exactly. Let's read the commentary properly.");
+                      patch({ asked: true });
+                      return true;
+                    }}
+                  />
                 </fieldset>
               )}
               {save.asked && <button className="btn" type="button" onClick={() => grant("explore", 0, "Signal's live. Bytes are dripping.")}>Open the packet scope</button>}
@@ -726,13 +733,14 @@ function UnfinishedInner({ onMap, onNext, difficulty }: { onMap?: () => void; on
                 const step = STEPS[index];
                 if (picked !== step.answer) {
                   damage(hints ? step.why : "Not that call. Try another reading.");
-                  return;
+                  return false;
                 }
                 const checks = save.checks.slice();
                 checks[index] = true;
                 const next = Math.min(STEPS.length, index + 1);
                 award(2, step.why);
                 patch({ checks, explore: next });
+                return true;
               }}
               onRecap1={() => {
                 if (order.join(",") !== "wire,chunk,text") {
@@ -758,32 +766,33 @@ function UnfinishedInner({ onMap, onNext, difficulty }: { onMap?: () => void; on
                   <strong>{chat.who}</strong>
                   <p>Seen so far: {chat.seen}</p>
                   <p>{chat.event}</p>
-                  <div className="row">
-                    {chat.tiles.map((tile) => (
-                      <button
-                        key={tile.id}
-                        type="button"
-                        className="btn ghost"
-                        disabled={save.chats.includes(chat.id) || index > save.chats.length}
-                        onClick={() => {
-                          if (tile.id !== chat.right) {
-                            setMiss(chat.miss);
-                            damage(chat.miss);
-                            return;
-                          }
-                          setMiss("");
-                          award(3, `${chat.who} is honest now.`);
-                          patch({ chats: [...save.chats, chat.id] });
-                        }}
-                      >
-                        {tile.label}
-                      </button>
-                    ))}
-                  </div>
+                  <EmojiAnswers
+                    name={chat.who}
+                    choices={chat.tiles.map((tile) => tile.label)}
+                    disabled={index > save.chats.length}
+                    locked={save.chats.includes(chat.id)}
+                    hotkeys={index === save.chats.length}
+                    value={save.chats.includes(chat.id) ? chat.tiles.findIndex((tile) => tile.id === chat.right) : undefined}
+                    onPick={(picked) => {
+                      const tile = chat.tiles[picked];
+                      if (tile.id !== chat.right) {
+                        setMiss(chat.miss);
+                        damage(chat.miss);
+                        return false;
+                      }
+                      setMiss("");
+                      award(3, `${chat.who} is honest now.`);
+                      patch({ chats: [...save.chats, chat.id] });
+                      return true;
+                    }}
+                  />
                   {save.chats.includes(chat.id) && <p className="good">Honest status locked.</p>}
                 </article>
               ))}
               {miss && <p className="bad">{miss}</p>}
+              <div className="quiz-gauges">
+                <ThermoGauge value={Number(temp) || 0} ok={Number.isFinite(Number(temp)) && Number(temp) >= 0 && Number(temp) <= 2} />
+              </div>
               <label>
                 Temperature flag
                 <input value={temp} onChange={(event) => setTemp(event.target.value)} />
@@ -828,33 +837,27 @@ function UnfinishedInner({ onMap, onNext, difficulty }: { onMap?: () => void; on
                           <input type="range" min={0} max={2} value={confidence} onChange={(event) => setConfidence(Number(event.target.value))} />
                           <span>{["Guessing", "Think so", "Sure"][confidence]}</span>
                         </label>
-                        <div className="grid">
-                          {item.options.map((option, choice) => (
-                            <button
-                              key={option}
-                              type="button"
-                              className="btn ghost"
-                              onClick={() => {
-                                if (choice === item.answer) {
-                                  const preds = save.preds.slice();
-                                  preds[index] = choice;
-                                  award(4, item.why);
-                                  patch({ preds });
-                                  return;
-                                }
-                                const sure = confidence === 2 ? " You were sure. Slow down on this one." : "";
-                                damage((hints ? item.why : "The sim played a different ending.") + sure);
-                                if (save.difficulty !== "ranked") {
-                                  const preds = save.preds.slice();
-                                  preds[index] = choice;
-                                  patch({ preds });
-                                }
-                              }}
-                            >
-                              {option}
-                            </button>
-                          ))}
-                        </div>
+                        <EmojiAnswers
+                          name={item.title}
+                          choices={item.options}
+                          onPick={(choice) => {
+                            if (choice === item.answer) {
+                              const preds = save.preds.slice();
+                              preds[index] = choice;
+                              award(4, item.why);
+                              patch({ preds });
+                              return true;
+                            }
+                            const sure = confidence === 2 ? " You were sure. Slow down on this one." : "";
+                            damage((hints ? item.why : "The sim played a different ending.") + sure);
+                            if (save.difficulty !== "ranked") {
+                              const preds = save.preds.slice();
+                              preds[index] = choice;
+                              patch({ preds });
+                            }
+                            return false;
+                          }}
+                        />
                       </>
                     ) : (
                       <p>{save.preds[index] === item.answer ? "Your call matched the sim." : `The sim played a different ending. ${item.why}`}</p>
@@ -923,26 +926,27 @@ function UnfinishedInner({ onMap, onNext, difficulty }: { onMap?: () => void; on
                   <strong>{index === 4 ? "Bonus · " : ""}{bug.name}</strong>
                   <p>{bug.symptom}</p>
                   {save.bugs[index] ? <p className="good">Closed.</p> : (
-                    <div className="grid">
-                      <button
-                        className="btn"
-                        type="button"
-                        onClick={() => {
+                    <EmojiAnswers
+                      name={bug.name}
+                      choices={[bug.fix, ...bug.wrong.map((move) => move.label)]}
+                      locked={save.bugs[index]}
+                      hotkeys={!save.bugs[index] && save.bugs.findIndex((ok) => !ok) === index}
+                      value={save.bugs[index] ? 0 : undefined}
+                      onPick={(picked) => {
+                        if (picked === 0) {
                           const bugs = save.bugs.slice();
                           bugs[index] = true;
                           award(5, "That test goes green.");
                           setBugNote("");
                           patch({ bugs });
-                        }}
-                      >
-                        {bug.fix}
-                      </button>
-                      {bug.wrong.map((move) => (
-                        <button key={move.label} className="btn ghost" type="button" onClick={() => { setBugNote(move.line); damage(move.line); }}>
-                          {move.label}
-                        </button>
-                      ))}
-                    </div>
+                          return true;
+                        }
+                        const move = bug.wrong[picked - 1];
+                        setBugNote(move.line);
+                        damage(move.line);
+                        return false;
+                      }}
+                    />
                   )}
                 </article>
               ))}
@@ -963,27 +967,22 @@ function UnfinishedInner({ onMap, onNext, difficulty }: { onMap?: () => void; on
                 <article className="card wide">
                   <strong>Phase {save.phase + 1} · {BOSS[save.phase].name}</strong>
                   <p>{BOSS[save.phase].brief}</p>
-                  <div className="grid">
-                    {BOSS[save.phase].options.map((option) => (
-                      <button
-                        key={option}
-                        type="button"
-                        className="btn ghost"
-                        onClick={() => {
-                          if (option !== BOSS[save.phase].right) {
-                            damage("That would ship a lie to a customer.");
-                            return;
-                          }
-                          const phase = save.phase + 1;
-                          const shield = phase === 1 ? 70 : phase === 2 ? 30 : 0;
-                          award(8, shield === 0 ? "Then stop screenshotting. Start shipping." : "Shield cracked.");
-                          patch({ phase, shield });
-                        }}
-                      >
-                        {option}
-                      </button>
-                    ))}
-                  </div>
+                  <EmojiAnswers
+                    name={BOSS[save.phase].name}
+                    choices={BOSS[save.phase].options}
+                    onPick={(picked) => {
+                      const option = BOSS[save.phase].options[picked];
+                      if (option !== BOSS[save.phase].right) {
+                        damage("That would ship a lie to a customer.");
+                        return false;
+                      }
+                      const phase = save.phase + 1;
+                      const shield = phase === 1 ? 70 : phase === 2 ? 30 : 0;
+                      award(8, shield === 0 ? "Then stop screenshotting. Start shipping." : "Shield cracked.");
+                      patch({ phase, shield });
+                      return true;
+                    }}
+                  />
                 </article>
               )}
               {save.shield === 0 && (
@@ -1074,7 +1073,7 @@ function Explore(props: {
   onFlush: (value: boolean) => void;
   onPlay: () => void;
   onOrder: (value: string[]) => void;
-  onCheck: (index: number, picked: number) => void;
+  onCheck: (index: number, picked: number) => boolean | void;
   onRecap1: () => void;
   onRecap2: () => void;
   onAdvance: () => void;
@@ -1089,6 +1088,7 @@ function Explore(props: {
       <div className="scope">
         {props.words.map((word, i) => <span key={`${word}-${i}`}>{word}</span>)}
       </div>
+      <StreamGraph words={props.words} wild={!props.flush} />
       <p className="terminal" aria-live="polite">{props.flush ? props.typed || "press play" : props.playing ? "buffer held…" : props.typed || "buffer held"}</p>
       <div className="row">
         <button className="btn" type="button" onClick={props.onPlay} disabled={props.playing}>Play</button>
@@ -1099,9 +1099,18 @@ function Explore(props: {
         <article className="card wide">
           <strong>Recap · tap the order</strong>
           <p>Wire, then chunk, then text.</p>
-          <div className="row">
-            {["wire", "chunk", "text"].map((card) => (
-              <button key={card} type="button" className={`btn ghost${props.order.includes(card) ? " on" : ""}`} onClick={() => props.onOrder(props.order.includes(card) ? props.order : [...props.order, card])}>{card}</button>
+          <div className="recap-order">
+            {["wire", "chunk", "text"].map((card, i) => (
+              <button
+                key={card}
+                type="button"
+                className={`emoji-card${props.order.includes(card) ? " on good" : ""}`}
+                onClick={() => props.onOrder(props.order.includes(card) ? props.order : [...props.order, card])}
+              >
+                <span className="emoji-face" aria-hidden>{emojiFor(card)}</span>
+                <span className="emoji-label">{card}</span>
+                <kbd className="emoji-key">{i + 1}</kbd>
+              </button>
             ))}
           </div>
           <p>{props.order.join(" → ") || "Tap in order"}</p>
@@ -1123,11 +1132,11 @@ function Explore(props: {
           {props.hints && <p>{step.watch}</p>}
           {props.hints && <p>{step.poke}</p>}
           <p><strong>{step.q}</strong></p>
-          <div className="grid">
-            {step.options.map((option, picked) => (
-              <button key={option} type="button" className="btn ghost" onClick={() => props.onCheck(index, picked)}>{option}</button>
-            ))}
-          </div>
+          <EmojiAnswers
+            name={step.q}
+            choices={step.options}
+            onPick={(picked) => props.onCheck(index, picked)}
+          />
         </article>
       )}
       {props.save.recap2 && <button className="btn" type="button" onClick={props.onAdvance}>Take the dinner rush</button>}
@@ -1154,13 +1163,18 @@ function CodeStage(props: {
       <p>Fill the missing blocks, then run them. The keeper must skip empty choices, append deltas, and stop on finish_reason.</p>
       <div className="grid">
         {BLANKS.map((blank, index) => (
-          <label key={blank.slot} className={`card ${props.save.blanks[index] === blank.answer ? "on" : ""}`}>
+          <div key={blank.slot} className={`card ${props.save.blanks[index] === blank.answer ? "on" : ""}`}>
             <span>{blank.slot}</span>
-            <select value={props.save.blanks[index]} onChange={(event) => props.onBlank(index, event.target.value)}>
-              <option value="">Choose</option>
-              {blank.options.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
-          </label>
+            <EmojiAnswers
+              name={blank.slot}
+              choices={blank.options}
+              value={blank.options.indexOf(props.save.blanks[index])}
+              hotkeys={props.save.blanks.findIndex((value) => !value) === index}
+              onPick={(picked) => {
+                props.onBlank(index, blank.options[picked]);
+              }}
+            />
+          </div>
         ))}
       </div>
       <button className="btn" type="button" onClick={props.onRunMicro}>Run the blocks</button>
@@ -1170,8 +1184,9 @@ function CodeStage(props: {
           <p className="terminal">{assembled.text || "…"} · finish_reason {assembled.finishReason} · pieces {assembled.pieces} · usage {assembled.usage?.total ?? "?"}</p>
           <div className="grid">
             {GUIDED.map((step, index) => (
-              <button key={step.step} type="button" className="card" disabled={props.save.guided[index]} onClick={() => props.onGuide(index)}>
-                <strong>{step.step}</strong>
+              <button key={step.step} type="button" className={`emoji-card${props.save.guided[index] ? " good" : ""}`} disabled={props.save.guided[index]} onClick={() => props.onGuide(index)}>
+                <span className="emoji-face" aria-hidden>{emojiFor(step.step)}</span>
+                <strong className="emoji-label">{step.step}</strong>
                 <span>{props.save.guided[index] ? "Check passed" : step.check}</span>
               </button>
             ))}

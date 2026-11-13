@@ -1,0 +1,122 @@
+/** Fitting emoji for every known answer label in Academy missions. */
+const MAP: Record<string, string> = {
+  "The bot crashed.": "💥",
+  "The reply stopped and nobody checked whether it finished.": "🧊",
+  "The customer's internet is slow.": "🐌",
+
+  "Blinking cursor": "⌨️",
+  "Green tick": "✅",
+  "The slow bot": "🐢",
+  "Token meter": "📊",
+
+  "It makes the model smarter.": "🧠",
+  "Customers see the reply start right away.": "👀",
+  "It uses fewer tokens.": "🎫",
+  "a blank line": "⬜",
+  ": keep-alive": "💤",
+  "data: [DONE]": "🏁",
+  '""': "📭",
+  "None": "🚫",
+  "KeyError": "💥",
+  "each word on a new line": "📝",
+  "nothing for a while, then the whole reply": "⏳",
+  "an error": "❌",
+  "the full reply": "📦",
+  "an empty string": "🕳️",
+  "the reply twice": "2️⃣",
+  "Yes, text stopped": "✅",
+  "No. We cannot call it complete": "🚧",
+  "Yes, if it ends with a full stop": "⏺️",
+
+  "Keep text · mark partial": "✂️",
+  "Mark all good": "🟢",
+  "Hide the silence": "🙈",
+  "Keep text · mark error": "⚠️",
+  "Retry forever": "🌀",
+  "Wait, then retry once": "⏳",
+  "Retry now": "⚡",
+
+  "Words still appear one by one.": "🔤",
+  "The screen stays blank, then the whole sentence lands.": "📦",
+  "Each word is on its own line.": "📄",
+  "The bot crashes on the last chunk.": "💥",
+  "The full reply, slightly faster.": "🚀",
+  "The reply, then a crash at the end.": "💣",
+  "Nothing. It crashes on the first chunk.": "😵",
+  'The word "None" before the reply.': "👻",
+  "Half a sentence with a green Delivered tick.": "🟢",
+  "Half a sentence marked partial.": "🟨",
+  "An error instead of the text.": "⛔",
+  "The bot quietly finishes the sentence.": "🪄",
+  "The bot remembers its reply.": "🧠",
+  "The reply never shows.": "🫥",
+  "The reply shows, but memory saves an empty message.": "📭",
+  "The reply shows twice.": "👯",
+  "The bot says it will try later.": "🫡",
+  "One retry, then the reply arrives.": "🔁",
+  "The partial line repeats until the city is rate-limited.": "🌪️",
+  "The loop runs once and stops.": "1️⃣",
+  "An error popup.": "🚨",
+  "The full reply. Limits only affect the prompt.": "📜",
+  "The line stops mid-sentence and the chat says truncated.": "✂️",
+  "The bot waits forever.": "⌛",
+
+  usage: "📊",
+  tokens: "🪙",
+  score: "⭐",
+  content: "💬",
+  role: "🎭",
+  '"\\n"': "↩️",
+  '" "': "␣",
+  True: "✅",
+  False: "❌",
+  append: "➕",
+  "+=": "🔗",
+  '"[DONE]"': "🏁",
+
+  "Skip empty choices": "⏭️",
+  "Print live": "📺",
+  "Finish signal": "🏁",
+  "Honest status": "🧭",
+
+  "Print and collect only when piece is truthy.": "✅",
+  "text += str(piece)": "👻",
+  "except TypeError: pass": "🙈",
+  'print(piece, end="", flush=True)': "📺",
+  "time.sleep(0.05)": "🐢",
+  "flush once after the loop": "⚰️",
+  "Append each piece in the same loop that prints.": "📒",
+  "Call the API again": "💸",
+  "list(stream) first": "📚",
+  "Set status after the loop: error, stop, length, else partial.": "🧭",
+  'complete if text else error': "🟢",
+  'if text.endswith(".")': "⏺️",
+  "Don't break on finish_reason. Usage arrives on the next chunk.": "📊",
+  "Count the words": "🔤",
+  "Ask the API for usage again": "🧾",
+
+  "Show each word as it arrives, and skip the role-only chunk.": "🎬",
+  "Wait for the full reply, then dump it.": "📦",
+  "Mark every chat all good.": "🟢",
+  "Partial, one retry after a pause, truncated.": "🛠️",
+  "All three are complete.": "✅",
+  "Retry all three immediately.": "🌪️",
+  "Replace each tick with the true status and a usage line.": "📋",
+  "Keep the ticks. Customers want a feeling.": "💚",
+  "Hide the board.": "🙈",
+
+  wire: "🔌",
+  chunk: "📦",
+  text: "✍️",
+};
+
+export function emojiFor(label: string): string {
+  if (MAP[label]) return MAP[label];
+  const trimmed = label.trim();
+  if (MAP[trimmed]) return MAP[trimmed];
+  return "👉";
+}
+
+export function asChoices(labels: string[]) {
+  return labels.map((label) => ({ emoji: emojiFor(label), label }));
+}

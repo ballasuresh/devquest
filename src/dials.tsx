@@ -4,6 +4,7 @@ import { TUNING } from "./game/types";
 import { rankFromAttempts } from "./game/rank";
 import { Hud } from "./ui/Hud";
 import { Effects, useFx } from "./ui/Effects";
+import { Mascot, CartoonProgress, ThermoGauge, BucketGauge, SignalLight, StreamGraph } from "./ui/quiz";
 
 const CALM = ["Your", "order", "is", "on", "the", "way.", "Delivery", "partner", "Arjun", "is", "near", "the", "main", "gate."];
 const WILD = ["Your", "order", "is", "on", "the", "way,", "gliding", "like", "a", "samosa", "through", "monsoon", "clouds,", "destiny", "unfolding."];
@@ -96,18 +97,28 @@ function DialsInner({ onMap, difficulty }: { onMap: () => void; difficulty: Diff
           <h1>The Dials</h1>
           <p className="who">The stream finishes. The reply still sounds wrong.</p>
           <div className="mentor">
-            <div className="orb" aria-hidden />
-            <p className="vyapti">
-              {locked
+            <Mascot
+              mood={locked ? "happy" : heat >= 1.2 ? "wow" : honest ? "think" : "idle"}
+              line={locked
                 ? "Dials set. Temperature stays in range, and the reply is allowed to finish."
                 : "Temperature changes the voice. The token cap can cut a finished sentence short. Move both into the target band."}
-            </p>
+            />
           </div>
+          <CartoonProgress items={[
+            { name: "Heat", have: heatOk ? 1 : 0, total: 1, emoji: "🌡️" },
+            { name: "Cap", have: capOk ? 1 : 0, total: 1, emoji: "🪣" },
+            { name: "Finish", have: reason === "stop" ? 1 : 0, total: 1, emoji: "🚦" },
+          ]} />
         </aside>
         <main className="stage">
           <p className="kicker">How to win</p>
           <h2>Tune Ila's tablet</h2>
           <p>She left temperature at 1.9. One reply writes poetry. Another stops at twelve words with finish_reason length. Lower the heat, then raise the cap until the line can finish honestly.</p>
+          <div className="quiz-gauges">
+            <ThermoGauge value={heat} ok={heatOk} />
+            <BucketGauge value={cap} ok={capOk} />
+            <SignalLight reason={reason} />
+          </div>
           <label>
             Temperature {heat.toFixed(1)} {heatOk ? "· in band" : heat >= 1.2 ? "· poetry" : "· still warm"}
             <input
@@ -135,6 +146,7 @@ function DialsInner({ onMap, difficulty }: { onMap: () => void; difficulty: Diff
           <div className={`scope ${heat >= 1.2 ? "wild" : ""}`} aria-label="Reply words">
             {words.map((word, index) => <span key={`${word}-${index}`} style={{ animationDelay: `${index * 40}ms` }}>{word}</span>)}
           </div>
+          <StreamGraph words={words} wild={heat >= 1.2} />
           <div className="row">
             <button className="btn ghost" type="button" onClick={play} disabled={playing}>Hear the stream</button>
             <p className="terminal">finish_reason: {reason} · words {words.length}{typed ? ` · live: ${typed}` : ""}</p>
