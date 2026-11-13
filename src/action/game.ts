@@ -1,9 +1,34 @@
 import { createAudio, type AudioApi } from "./audio";
+import { loadPrefs, onPrefs, savePrefs, type Prefs } from "../nav/prefs";
 
-export type GameHooks = { onAcademy: () => void };
-export type GameHandle = { destroy: () => void };
+export type Mode = "title" | "play" | "upgrade" | "dead";
 
-type Mode = "title" | "play" | "upgrade" | "dead";
+export type GameSnap = {
+  mode: Mode;
+  paused: boolean;
+  score: number;
+  wave: number;
+  kills: number;
+  xp: number;
+  best: number;
+  justDied?: boolean;
+};
+
+export type GameHooks = {
+  onAcademy: () => void;
+  onTitle: () => void;
+  onState: (s: GameSnap) => void;
+};
+
+export type GameHandle = {
+  destroy: () => void;
+  begin: () => void;
+  pause: () => void;
+  resume: () => void;
+  restart: () => void;
+  quit: () => void;
+  getState: () => GameSnap;
+};
 type Kind = "glitch" | "wraith" | "cursor" | "storm" | "boss";
 type Team = "enemy" | "player";
 
@@ -72,6 +97,9 @@ function inArc(ex: number, ey: number, px: number, py: number, facing: number, r
 
 export function createGame(canvas: HTMLCanvasElement, hooks: GameHooks): GameHandle {
   const audio: AudioApi = createAudio();
+  let prefs: Prefs = loadPrefs();
+  audio.applyPrefs(prefs);
+  const stopPrefs = onPrefs((p) => { prefs = p; audio.applyPrefs(p); });
   const gfx = canvas.getContext("2d");
   if (!gfx) throw new Error("canvas");
   const ctx: CanvasRenderingContext2D = gfx;
@@ -96,6 +124,14 @@ export function createGame(canvas: HTMLCanvasElement, hooks: GameHooks): GameHan
   let last = 0;
   let killed = 0;
   let bossNamed = false;
+
+  function snap(extra?: Partial<GameSnap>): GameSnap {
+    return { mode, paused, score, wave, kills: killed, xp, best, ...extra };
+  }
+  function notify(extra?: Partial<GameSnap>) {
+    hooks.onState(snap(extra));
+  }
+
 
   try { best = Number(localStorage.getItem(HIT) || 0) || 0; } catch { /* ignore */ }
 
@@ -123,7 +159,8 @@ export function createGame(canvas: HTMLCanvasElement, hooks: GameHooks): GameHan
   }
 
   function burst(x: number, y: number, color: string, n = 12, speed = 220, glow = true, size = 3) {
-    for (let i = 0; i < n; i++) {
+    const count = prefs.reducedMotion ? Math.min(4, Math.ceil(n / 4)) : n;
+    for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
       const s = speed * (0.3 + Math.random() * 0.9);
       if (parts.length > 420) parts.shift();
@@ -139,7 +176,7 @@ export function createGame(canvas: HTMLCanvasElement, hooks: GameHooks): GameHan
     floats.push({ x, y, text, life: 0.8, color });
   }
 
-  function rumble(n: number) { shake = Math.max(shake, n); }
+  function rumble(n: number) { if (!prefs.reducedMotion) shake = Math.max(shake, n); }
 
   function say(text: string, dur = 1.6) { banner = text; bannerT = dur; }
 
@@ -255,14 +292,19 @@ export function createGame(canvas: HTMLCanvasElement, hooks: GameHooks): GameHan
     }
     hoverCard = -1;
     mode = "upgrade";
+    paused = false;
+    notify();
   }
 
   function begin() {
     audio.unlock();
-    audio.startMusic();
+    audio.applyPrefs(prefs);
+    if (prefs.music && !prefs.muted) audio.startMusic();
     resetRun();
     mode = "play";
+    paused = false;
     queueWave();
+    notify();
   }
 
   function hurtPlayer(dmg: number, kx: number, ky: number) {
@@ -287,6 +329,7 @@ export function createGame(canvas: HTMLCanvasElement, hooks: GameHooks): GameHan
     if (player.hp <= 0) {
       player.hp = 0;
       mode = "dead";
+      paused = false;
       audio.sfx("dead");
       burst(player.x, player.y, GOLD, 40, 360);
       say("THE LINE BROKE", 99);
@@ -294,6 +337,7 @@ export function createGame(canvas: HTMLCanvasElement, hooks: GameHooks): GameHan
         best = score;
         try { localStorage.setItem(HIT, String(best)); } catch { /* ignore */ }
       }
+      notify({ justDied: true });
     }
   }
 
@@ -1000,9 +1044,6 @@ export function createGame(canvas: HTMLCanvasElement, hooks: GameHooks): GameHan
     ctx.textBaseline = "alphabetic";
   }
 
-  function hitBtn(x: number, y: number, mx: number, my: number, bw: number, bh: number) {
-    return mx > x - bw / 2 && mx < x + bw / 2 && my > y - bh / 2 && my < y + bh / 2;
-  }
 
   function drawUpgrade() {
     ctx.fillStyle = "rgba(4,6,12,0.55)";
@@ -1041,7 +1082,7 @@ export function createGame(canvas: HTMLCanvasElement, hooks: GameHooks): GameHan
     });
     ctx.fillStyle = "rgba(255,255,255,0.5)";
     ctx.font = "500 13px Outfit, sans-serif";
-    ctx.fillText("Click a card or press 1  2  3", w / 2, h * 0.82);
+    ctx.fillText("Click a card or press 1  2  3     Esc  leaves the run", w / 2, h * 0.82);
   }
 
   function wrapText(text: string, x: number, y: number, max: number, lh: number) {
@@ -1061,21 +1102,8 @@ export function createGame(canvas: HTMLCanvasElement, hooks: GameHooks): GameHan
   }
 
   function drawDead() {
-    ctx.fillStyle = "rgba(8,0,0,0.55)";
+    ctx.fillStyle = "rgba(8,0,0,0.4)";
     ctx.fillRect(0, 0, w, h);
-    ctx.textAlign = "center";
-    ctx.fillStyle = RED;
-    ctx.font = "800 64px Fraunces, Georgia, serif";
-    ctx.fillText("THE LINE BROKE", w / 2, h * 0.36);
-    ctx.fillStyle = "#fff";
-    ctx.font = "600 20px Outfit, sans-serif";
-    ctx.fillText(`Score  ${score}    Wave  ${wave}    Kills  ${killed}`, w / 2, h * 0.46);
-    if (score >= best && score > 0) {
-      ctx.fillStyle = GOLD;
-      ctx.fillText("New high score", w / 2, h * 0.52);
-    }
-    roundBtn(w / 2, h * 0.64, 210, 54, GOLD, "#1c1406", "RESTART");
-    roundBtn(w / 2, h * 0.74, 210, 44, "rgba(8,10,16,0.8)", "#fff", "TITLE");
   }
 
   function joyLayout() {
@@ -1111,15 +1139,8 @@ export function createGame(canvas: HTMLCanvasElement, hooks: GameHooks): GameHan
   }
 
   function drawPaused() {
-    ctx.fillStyle = "rgba(4,6,12,0.55)";
+    ctx.fillStyle = "rgba(4,6,12,0.45)";
     ctx.fillRect(0, 0, w, h);
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#fff";
-    ctx.font = "800 48px Fraunces, Georgia, serif";
-    ctx.fillText("PAUSED", w / 2, h * 0.45);
-    ctx.font = "500 16px Outfit, sans-serif";
-    ctx.fillStyle = "rgba(255,255,255,0.7)";
-    ctx.fillText("Esc to resume    M mute    Academy from the title screen", w / 2, h * 0.54);
   }
 
   function draw() {
@@ -1236,13 +1257,9 @@ export function createGame(canvas: HTMLCanvasElement, hooks: GameHooks): GameHan
     upgrade = [];
     mode = "play";
     queueWave();
+    notify();
   }
 
-  function onTitleClick(x: number, y: number) {
-    audio.unlock();
-    if (hitBtn(w / 2, h * 0.58, x, y, 210, 54)) { audio.sfx("ui"); begin(); return; }
-    if (hitBtn(w / 2, h * 0.68, x, y, 210, 44)) { audio.sfx("ui"); hooks.onAcademy(); }
-  }
 
   function touchAt(x: number, y: number) {
     const L = joyLayout();
@@ -1256,12 +1273,7 @@ export function createGame(canvas: HTMLCanvasElement, hooks: GameHooks): GameHan
     audio.unlock();
     const { x, y } = toLocal(e);
     mouse.x = x; mouse.y = y;
-    if (mode === "title") { onTitleClick(x, y); return; }
-    if (mode === "dead") {
-      if (hitBtn(w / 2, h * 0.64, x, y, 210, 54)) { audio.sfx("ui"); begin(); }
-      else if (hitBtn(w / 2, h * 0.74, x, y, 210, 44)) { audio.sfx("ui"); mode = "title"; }
-      return;
-    }
+    if (mode === "title" || mode === "dead" || paused) return;
     if (mode === "upgrade") {
       const i = cardAt(x, y);
       if (i >= 0) pickCard(i);
@@ -1314,15 +1326,11 @@ export function createGame(canvas: HTMLCanvasElement, hooks: GameHooks): GameHan
     if (down) keys.add(k); else keys.delete(k);
     if (!down) return;
     audio.unlock();
-    if (k === "m") { audio.toggleMute(); say(audio.muted() ? "MUTED" : "SOUND ON", 0.8); }
-    if (k === "escape") {
-      if (mode === "play") paused = !paused;
-      else if (mode === "upgrade") { /* stay */ }
+    if (k === "m" && mode === "play" && !paused) {
+      const p = loadPrefs();
+      savePrefs({ muted: !p.muted });
+      say(!p.muted ? "MUTED" : "SOUND ON", 0.8);
     }
-    if (mode === "title" && (k === "enter" || k === " ")) begin();
-    if (mode === "title" && k === "a") hooks.onAcademy();
-    if (mode === "dead" && (k === "enter" || k === "r" || k === " ")) begin();
-    if (mode === "dead" && k === "t") mode = "title";
     if (mode === "upgrade" && (k === "1" || k === "2" || k === "3")) pickCard(Number(k) - 1);
     if (mode === "play" && !paused && (k === "j" || k === " ")) startAttack();
     if (mode === "play" && !paused && (k === "shift" || k === "k")) startDash();
@@ -1350,9 +1358,16 @@ export function createGame(canvas: HTMLCanvasElement, hooks: GameHooks): GameHan
   raf = requestAnimationFrame(frame);
 
   return {
+    begin,
+    pause() { if (mode === "play" && !paused) { paused = true; notify(); } },
+    resume() { if (paused) { paused = false; notify(); } },
+    restart() { begin(); },
+    quit() { paused = false; mode = "title"; audio.stopMusic(); hooks.onTitle(); },
+    getState: () => snap(),
     destroy() {
       cancelAnimationFrame(raf);
       audio.stopMusic();
+      stopPrefs();
       canvas.removeEventListener("pointerdown", onDown);
       canvas.removeEventListener("pointermove", onMove);
       canvas.removeEventListener("pointerup", onUp);

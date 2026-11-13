@@ -25,6 +25,8 @@ export type AudioApi = {
   toggleMusic: () => boolean;
   muted: () => boolean;
   musicOn: () => boolean;
+  applyPrefs: (p: { muted: boolean; music: boolean; volume: number }) => void;
+  volume: () => number;
 };
 
 export function createAudio(): AudioApi {
@@ -33,6 +35,7 @@ export function createAudio(): AudioApi {
   let musicGain: GainNode | null = null;
   let muted = false;
   let music = true;
+  let volume = 0.7;
   let musicTimer = 0;
   let step = 0;
 
@@ -41,7 +44,7 @@ export function createAudio(): AudioApi {
       const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       ctx = new AC();
       master = ctx.createGain();
-      master.gain.value = muted ? 0 : 0.7;
+      master.gain.value = muted ? 0 : volume;
       master.connect(ctx.destination);
       musicGain = ctx.createGain();
       musicGain.gain.value = music ? 0.18 : 0;
@@ -193,10 +196,15 @@ export function createAudio(): AudioApi {
     step += 1;
   }
 
+  function applyMaster() {
+    if (master) master.gain.value = muted ? 0 : volume;
+    if (musicGain) musicGain.gain.value = music && !muted ? 0.18 : 0;
+  }
+
   function startMusic() {
     unlock();
     music = true;
-    if (musicGain) musicGain.gain.value = 0.18;
+    applyMaster();
     if (musicTimer) return;
     pulse();
     musicTimer = window.setInterval(pulse, 480);
@@ -216,18 +224,24 @@ export function createAudio(): AudioApi {
     stopMusic,
     toggleMute() {
       muted = !muted;
-      if (master) master.gain.value = muted ? 0 : 0.7;
+      applyMaster();
       return muted;
     },
     toggleMusic() {
       music = !music;
       if (music) startMusic();
-      else {
-        if (musicGain) musicGain.gain.value = 0;
-      }
+      else applyMaster();
       return music;
     },
     muted: () => muted,
     musicOn: () => music,
+    volume: () => volume,
+    applyPrefs(p) {
+      muted = p.muted;
+      music = p.music;
+      volume = Math.max(0, Math.min(1, p.volume));
+      if (music && !muted) startMusic();
+      else applyMaster();
+    },
   };
 }

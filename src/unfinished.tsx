@@ -598,7 +598,7 @@ function UnfinishedInner({ onMap, onNext, difficulty }: { onMap?: () => void; on
         <button className="btn ghost" type="button" onClick={() => patch({ theme: save.theme === "dark" ? "light" : "dark" })}>
           {save.theme === "dark" ? "Light" : "Dark"}
         </button>
-        {onMap && <button className="btn ghost" type="button" onClick={onMap}>District</button>}
+        {onMap && <button className="btn ghost" type="button" onClick={onMap}>Academy</button>}
       </header>
       <div className="the-line" aria-label="The Line">
         {LINE.map((word, index) => (

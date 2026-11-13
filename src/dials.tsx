@@ -88,7 +88,7 @@ function DialsInner({ onMap, difficulty }: { onMap: () => void; difficulty: Diff
         <button className="btn ghost" type="button" onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}>
           {theme === "dark" ? "Light" : "Dark"}
         </button>
-        <button className="btn ghost" type="button" onClick={onMap}>District</button>
+        <button className="btn ghost" type="button" onClick={onMap}>Academy</button>
       </header>
       <div className="layout">
         <aside className="panel">

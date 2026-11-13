@@ -123,11 +123,14 @@ export function WorldHub({ onEnter }: { onEnter: (id: HubMission, difficulty: Di
         }
         if (near) setCard(near);
       }
-      if (e.key === "Escape") setCard(null);
+      if (e.key === "Escape") {
+        if (card) { e.preventDefault(); e.stopImmediatePropagation(); setCard(null); return; }
+        if (!pref.seenHelp) { e.preventDefault(); e.stopImmediatePropagation(); setPref((s) => ({ ...s, seenHelp: true })); return; }
+      }
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [near, card, pref.difficulty, onEnter]);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [near, card, pref.difficulty, pref.seenHelp, onEnter]);
 
   const focus = NODES.find((n) => n.id === (card ?? near)) ?? null;
   const art = pref.theme === "light" ? "/art/port-day.jpg" : "/art/port-night.jpg";
