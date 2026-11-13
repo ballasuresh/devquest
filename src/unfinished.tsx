@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Difficulty } from "./game/types";
+import { TUNING } from "./game/types";
+import { rankFromAttempts, rewardFor } from "./game/rank";
+import { DEMO_CHUNKS, keepLine } from "./game/lineKeeper";
+import { Hud } from "./ui/Hud";
+import { Effects, useFx } from "./ui/Effects";
+
 
 const SAVE = "dq-m35";
 const LINE = ["Your", "order", "is", "on", "the", "way."];
@@ -28,6 +35,14 @@ type Progress = {
   phase: number;
   xp: number;
   reached: number;
+  difficulty: Difficulty;
+  packetLoss: number;
+  streak: number;
+  bestStreak: number;
+  coins: number;
+  attempts: number;
+  heartsLost: number;
+  startedAt: number;
 };
 
 const AVATARS = [
@@ -307,6 +322,14 @@ function fresh(): Progress {
     phase: 0,
     xp: 0,
     reached: 0,
+    difficulty: "guided",
+    packetLoss: 0,
+    streak: 0,
+    bestStreak: 0,
+    coins: 0,
+    attempts: 1,
+    heartsLost: 0,
+    startedAt: Date.now(),
   };
 }
 
@@ -331,8 +354,37 @@ function lineFill(stage: StageId, explore: number) {
   return 0;
 }
 
-export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () => void }) {
-  const [save, setSave] = useState<Progress>(load);
+const OBJECTIVES: Record<StageId, string> = {
+  pick: "3.5 · Choose your operator",
+  open: "3.5 · Witness the frozen reply",
+  discover: "3.5 · Identify the failure",
+  explore: "3.5 · Loot the stream chunks",
+  assign: "3.5 · Give each chat an honest status",
+  predict: "3.5 · Call the outcome before you run",
+  code: "3.5 · Craft the Line Keeper",
+  debug: "3.5 · Patch Ila's hotfix",
+  boss: "3.5 · Break the All-Good board",
+  win: "3.5 · Line restored",
+};
+
+export function Unfinished({ onMap, onNext, difficulty = "guided" }: { onMap?: () => void; onNext?: () => void; difficulty?: Difficulty }) {
+  return (
+    <Effects>
+      <UnfinishedInner onMap={onMap} onNext={onNext} difficulty={difficulty} />
+    </Effects>
+  );
+}
+
+function UnfinishedInner({ onMap, onNext, difficulty }: { onMap?: () => void; onNext?: () => void; difficulty: Difficulty }) {
+  const fx = useFx();
+  const [save, setSave] = useState<Progress>(() => {
+    const loaded = load();
+    if (!loaded.avatar || loaded.stage === "pick") {
+      const tune = TUNING[difficulty];
+      return { ...loaded, difficulty, hearts: loaded.hearts > tune.hearts ? tune.hearts : (loaded.stage === "pick" ? tune.hearts : loaded.hearts), startedAt: loaded.startedAt || Date.now() };
+    }
+    return loaded;
+  });
   const [note, setNote] = useState("A reply isn't done when it stops. It's done when it says it's done.");
   const [typed, setTyped] = useState("");
   const [playing, setPlaying] = useState(false);
@@ -344,21 +396,115 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
   const [tests, setTests] = useState<string[]>([]);
   const [bugNote, setBugNote] = useState("");
   const [confidence, setConfidence] = useState(1);
+  const [flash, setFlash] = useState<"good" | "bad" | "">("");
+  const timers = useRef<number[]>([]);
+  const tune = TUNING[save.difficulty];
+  const timed = save.stage !== "pick" && save.stage !== "open" && save.stage !== "win";
+  const [left, setLeft] = useState(tune.timeMs);
+  const hints = tune.hints && save.ai;
 
   useEffect(() => {
     localStorage.setItem(SAVE, JSON.stringify(save));
     document.documentElement.dataset.theme = save.theme;
   }, [save]);
 
+  useEffect(() => () => {
+    timers.current.forEach((id) => window.clearTimeout(id));
+  }, []);
+
+
   function patch(next: Partial<Progress>) {
     setSave((current) => ({ ...current, ...next }));
+  }
+
+  function later(fn: () => void, ms: number) {
+    const id = window.setTimeout(fn, ms);
+    timers.current.push(id);
+    return id;
+  }
+
+  function punch(kind: "good" | "bad") {
+    setFlash(kind);
+    later(() => setFlash(""), 420);
+  }
+
+  function damage(message: string) {
+    fx.shake();
+    punch("bad");
+    setSave((current) => {
+      const last = current.hearts <= 1;
+      const packetLoss = Math.min(100, current.packetLoss + 12);
+      const heartsLost = current.heartsLost + 1;
+      if (last) {
+        return { ...current, hearts: TUNING[current.difficulty].hearts, packetLoss, streak: 0, heartsLost, attempts: current.attempts + 1 };
+      }
+      return { ...current, hearts: current.hearts - 1, packetLoss, streak: 0, heartsLost };
+    });
+    setSave((current) => {
+      // read-after-write to decide copy -- actually this sees the new state
+      return current;
+    });
+    // toast based on pre-update snapshot
+    if (save.hearts <= 1) {
+      fx.toast("Checkpoint -- hearts restored. XP stays.", "info");
+      setNote("Recovery. Same stage, hearts back. Your XP is safe.");
+    } else {
+      fx.toast("Heart lost", "hit");
+      setNote(hints ? message : "That call cost a heart.");
+    }
+  }
+
+  function award(amount: number, message: string) {
+    punch("good");
+    const streak = save.streak + 1;
+    const gain = Math.round(amount * tune.xpMul * (streak >= 3 ? 1.2 : 1));
+    setSave((current) => {
+      const nextStreak = current.streak + 1;
+      const nextGain = Math.round(amount * TUNING[current.difficulty].xpMul * (nextStreak >= 3 ? 1.2 : 1));
+      return {
+        ...current,
+        streak: nextStreak,
+        bestStreak: Math.max(current.bestStreak, nextStreak),
+        packetLoss: Math.max(0, current.packetLoss - 6),
+        xp: current.xp + nextGain,
+      };
+    });
+    if (gain) fx.toast(`+${gain} XP${streak >= 3 ? " · combo x" + streak : ""}`, "xp");
+    setNote(message);
   }
 
   const at = FLOW.indexOf(save.stage);
   const filled = lineFill(save.stage, save.checks.filter(Boolean).length);
   const words = useMemo(() => LINE.slice(0, Math.max(1, Math.min(length, filled || 1))), [length, filled]);
+  const rank = rankFromAttempts(save.attempts);
+  const maxHearts = tune.hearts;
+
+  const timedOut = useRef(false);
+  useEffect(() => {
+    timedOut.current = false;
+    setLeft(tune.timeMs);
+  }, [save.stage, tune.timeMs]);
+
+  useEffect(() => {
+    if (!timed) return;
+    const id = window.setInterval(() => {
+      setLeft((ms) => Math.max(0, ms - 250));
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [save.stage, timed]);
+
+  useEffect(() => {
+    if (!timed || left > 0 || timedOut.current) return;
+    timedOut.current = true;
+    damage("The clock ran out. Same stage -- try a faster honest call.");
+    setLeft(tune.timeMs);
+    later(() => { timedOut.current = false; }, 400);
+  }, [left, timed, tune.timeMs]);
+
 
   function playStream() {
+    timers.current.forEach((id) => window.clearTimeout(id));
+    timers.current = [];
     setPlaying(true);
     setTyped("");
     const pieces = LINE.slice(0, length);
@@ -366,24 +512,39 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
     const tick = () => {
       i += 1;
       setTyped(pieces.slice(0, i).join(" "));
-      if (i < pieces.length) window.setTimeout(tick, flush ? 280 : 0);
+      if (i < pieces.length) later(tick, flush ? 280 : 0);
       else setPlaying(false);
     };
     if (!flush) {
-      window.setTimeout(() => {
+      later(() => {
         setTyped(pieces.join(" "));
         setPlaying(false);
       }, 900);
       return;
     }
-    window.setTimeout(tick, 200);
+    later(tick, 200);
   }
 
   function grant(stage: StageId, amount: number, vyapti: string) {
-    setNote(vyapti);
     const next = FLOW.indexOf(stage);
-    const forward = next > at;
-    patch({ stage, xp: save.xp + (forward ? amount : 0), reached: Math.max(save.reached, next) });
+    const forward = next > FLOW.indexOf(save.stage);
+    const xpGain = forward ? Math.round(amount * tune.xpMul) : 0;
+    setNote(vyapti);
+    setSave((current) => {
+      const atNow = FLOW.indexOf(current.stage);
+      const going = FLOW.indexOf(stage) > atNow;
+      const gain = going ? Math.round(amount * TUNING[current.difficulty].xpMul) : 0;
+      return {
+        ...current,
+        stage,
+        xp: current.xp + gain,
+        reached: Math.max(current.reached, FLOW.indexOf(stage)),
+        coins: current.coins + (going ? 6 : 0),
+        packetLoss: Math.max(0, current.packetLoss - (going ? 8 : 0)),
+      };
+    });
+    if (forward && xpGain) fx.toast(`+${xpGain} XP · stage clear`, "good");
+    if (forward && stage === "win") fx.loot("Ember Thread");
   }
 
   function go(index: number) {
@@ -391,8 +552,27 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
     patch({ stage: FLOW[index] });
   }
 
+
+  const result = rewardFor(
+    { attempts: save.attempts, timeMs: Math.max(0, Date.now() - (save.startedAt || Date.now())), heartsLost: save.heartsLost, streakBest: save.bestStreak },
+    save.difficulty,
+  );
+
   return (
-    <div className="bg mission">
+    <div className={`bg mission has-hud ${flash ? `flash-${flash}` : ""}`}>
+      <Hud
+        hearts={save.hearts}
+        maxHearts={maxHearts}
+        xp={save.xp}
+        xpMax={120}
+        rank={rank}
+        packetLoss={save.packetLoss}
+        objective={OBJECTIVES[save.stage]}
+        timeLeftMs={timed ? left : 0}
+        showTimer={timed}
+        streak={save.streak}
+        coins={save.coins}
+      />
       <header className="topbar">
         <div className="brand-lock">
           <strong>DevQuest</strong>
@@ -415,10 +595,10 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
             );
           })}
         </nav>
-        <button className="btn ghost" onClick={() => patch({ theme: save.theme === "dark" ? "light" : "dark" })}>
+        <button className="btn ghost" type="button" onClick={() => patch({ theme: save.theme === "dark" ? "light" : "dark" })}>
           {save.theme === "dark" ? "Light" : "Dark"}
         </button>
-        {onMap && <button className="btn ghost" type="button" onClick={onMap}>All topics</button>}
+        {onMap && <button className="btn ghost" type="button" onClick={onMap}>District</button>}
       </header>
       <div className="the-line" aria-label="The Line">
         {LINE.map((word, index) => (
@@ -429,26 +609,38 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
       </div>
       <div className="layout">
         <aside className="panel">
-          <p className="kicker">Mission 3.5</p>
+          <p className="kicker">Mission 3.5 · {save.difficulty}</p>
           <h1>The Unfinished Line</h1>
           <p className="who">{save.avatar ? `${save.avatar} · ops floor` : "Same path for every avatar."}</p>
           <div className="mentor">
             <div className={`orb ${save.ai ? "on" : "off"}`} aria-hidden />
-            <p className="vyapti">{save.ai ? note : "Quiet isn't the same as done. Tap the next honest move."}</p>
+            <p className="vyapti">{hints ? note : "Quiet isn't the same as done. Tap the next honest move."}</p>
           </div>
-          <label className="toggle">
-            <input type="checkbox" checked={save.ai} onChange={(event) => patch({ ai: event.target.checked })} />
-            Mentor {save.ai ? "live" : "scripted"}
-          </label>
-          <p className="xp-chip"><strong>{save.xp}</strong> XP</p>
+          {save.difficulty !== "ranked" && (
+            <label className="toggle">
+              <input type="checkbox" checked={save.ai} onChange={(event) => patch({ ai: event.target.checked })} />
+              Mentor {save.ai ? "live" : "scripted"}
+            </label>
+          )}
+          <p className="xp-chip"><strong>{save.xp}</strong> XP · {save.coins} coins</p>
         </aside>
         <main className="stage">
           {save.stage === "pick" && (
             <section>
+              <p className="kicker">First brief</p>
               <h2>Who is holding the scope?</h2>
+              <p>Wrong calls cost a heart. At zero you respawn on this stage — XP stays. Follow the ribbon, and listen when the mentor speaks.</p>
               <div className="grid">
                 {AVATARS.map((avatar) => (
-                  <button key={avatar.id} className="card" onClick={() => { patch({ avatar: avatar.id, stage: "open", reached: Math.max(save.reached, 0) }); setNote(`${avatar.id}. That all-green chat is your biryani.`); }}>
+                  <button
+                    key={avatar.id}
+                    type="button"
+                    className="card"
+                    onClick={() => {
+                      patch({ avatar: avatar.id, stage: "open", reached: Math.max(save.reached, 0), difficulty, hearts: tune.hearts, startedAt: Date.now() });
+                      setNote(`${avatar.id}. That all-green chat is your biryani.`);
+                    }}
+                  >
                     <span className="mark" aria-hidden>{avatar.id.slice(0, 1)}</span>
                     <strong>{avatar.id}</strong>
                     <span>{avatar.role}</span>
@@ -461,11 +653,11 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
           {save.stage === "open" && (
             <section className="phone">
               <p className="rain">Friday, 9:40 PM. Rain on the hostel window.</p>
-              <Bubble who="Customer" text="Where is my order?" />
-              <Bubble who="Dabba Dash" text="Your order is on the|" frozen />
-              <Bubble who="Ila" text="Four thousand chats tonight. All green. Lovely work, team." />
-              <Bubble who={save.avatar || "Tanvi"} text="That all-green chat? That's my biryani." />
-              <button className="btn" onClick={() => grant("discover", 0, "This reply stopped mid-sentence. Tap the clues.")}>Step into the ops room</button>
+              <Bubble who="Customer" text="Where is my order?" delay={0} />
+              <Bubble who="Dabba Dash" text="Your order is on the|" frozen delay={1} />
+              <Bubble who="Ila" text="Four thousand chats tonight. All green. Lovely work, team." delay={2} />
+              <Bubble who={save.avatar || "Tanvi"} text="That all-green chat? That's my biryani." delay={3} />
+              <button className="btn" type="button" onClick={() => grant("discover", 0, "This reply stopped mid-sentence. Tap the clues.")}>Step into the ops room</button>
             </section>
           )}
 
@@ -477,6 +669,7 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
                 {CLUES.map((clue) => (
                   <button
                     key={clue.id}
+                    type="button"
                     className={`card ${save.clues.includes(clue.id) ? "on" : ""}`}
                     onClick={() => {
                       const clues = save.clues.includes(clue.id) ? save.clues : [...save.clues, clue.id];
@@ -493,13 +686,25 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
                 <fieldset className="ask">
                   <legend>What's actually wrong?</legend>
                   {["The bot crashed.", "The reply stopped and nobody checked whether it finished.", "The customer's internet is slow."].map((choice) => (
-                    <button key={choice} className="btn ghost" onClick={() => { patch({ asked: true, xp: save.xp + 5 }); setNote(choice.startsWith("The reply") ? "Exactly. Let's read the commentary properly." : "Close enough to feel it. The reply stopped, and the board still said all good."); }}>
+                    <button
+                      key={choice}
+                      type="button"
+                      className="btn ghost"
+                      onClick={() => {
+                        if (!choice.startsWith("The reply")) {
+                          damage("Close — but the crash isn't the story. The reply stopped, and the board still said all good.");
+                          return;
+                        }
+                        award(5, "Exactly. Let's read the commentary properly.");
+                        patch({ asked: true });
+                      }}
+                    >
                       {choice}
                     </button>
                   ))}
                 </fieldset>
               )}
-              {save.asked && <button className="btn" onClick={() => grant("explore", 0, "Signal's live. Bytes are dripping.")}>Open the packet scope</button>}
+              {save.asked && <button className="btn" type="button" onClick={() => grant("explore", 0, "Signal's live. Bytes are dripping.")}>Open the packet scope</button>}
             </section>
           )}
 
@@ -512,6 +717,7 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
               length={length}
               order={order}
               words={words}
+              hints={hints}
               onLength={setLength}
               onFlush={setFlush}
               onPlay={playStream}
@@ -519,26 +725,26 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
               onCheck={(index, picked) => {
                 const step = STEPS[index];
                 if (picked !== step.answer) {
-                  setNote(step.why);
+                  damage(hints ? step.why : "Not that call. Try another reading.");
                   return;
                 }
                 const checks = save.checks.slice();
                 checks[index] = true;
                 const next = Math.min(STEPS.length, index + 1);
+                award(2, step.why);
                 patch({ checks, explore: next });
-                setNote(step.why);
               }}
               onRecap1={() => {
                 if (order.join(",") !== "wire,chunk,text") {
-                  setNote("Order: how it travels, then one chunk, then the text inside it.");
+                  damage("Order: how it travels, then one chunk, then the text inside it.");
                   return;
                 }
+                award(4, "Three balls bowled. We know how the commentary travels.");
                 patch({ recap1: true });
-                setNote("Three balls bowled. We know how the commentary travels.");
               }}
               onRecap2={() => {
-                patch({ recap2: true, xp: save.xp + 10 });
-                setNote("Six for six. The other 30% is what you do when the rain comes.");
+                award(10, "Six for six. The other 30% is what you do when the rain comes.");
+                patch({ recap2: true });
               }}
               onAdvance={() => grant("assign", 0, "Three chats. Never all good.")}
             />
@@ -556,17 +762,18 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
                     {chat.tiles.map((tile) => (
                       <button
                         key={tile.id}
+                        type="button"
                         className="btn ghost"
                         disabled={save.chats.includes(chat.id) || index > save.chats.length}
                         onClick={() => {
                           if (tile.id !== chat.right) {
                             setMiss(chat.miss);
-                            setNote(chat.miss);
+                            damage(chat.miss);
                             return;
                           }
                           setMiss("");
+                          award(3, `${chat.who} is honest now.`);
                           patch({ chats: [...save.chats, chat.id] });
-                          setNote(`${chat.who} is honest now.`);
                         }}
                       >
                         {tile.label}
@@ -585,10 +792,11 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
               {save.chats.length === 3 && (
                 <button
                   className="btn"
+                  type="button"
                   onClick={() => {
                     const value = Number(temp);
                     if (!Number.isFinite(value) || value < 0 || value > 2) {
-                      setNote("--temperature must be between 0.0 and 2.0");
+                      damage("--temperature must be between 0.0 and 2.0");
                       return;
                     }
                     grant("predict", 10, "Predict first. Then we run it.");
@@ -603,36 +811,60 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
           {save.stage === "predict" && (
             <section>
               <h2>Ila's review board</h2>
-              {PREDS.map((item, index) => (
-                <article key={item.title} className={`card wide ${save.preds[index] !== undefined ? "on" : ""}`}>
-                  <strong>P{index + 1} · {item.title}</strong>
-                  <p>{item.change}</p>
-                  {save.preds[index] === undefined ? (
-                    <>
-                      <label>
-                        Confidence
-                        <input type="range" min={0} max={2} value={confidence} onChange={(event) => setConfidence(Number(event.target.value))} />
-                        <span>{["Guessing", "Think so", "Sure"][confidence]}</span>
-                      </label>
-                      <div className="grid">
-                        {item.options.map((option, choice) => (
-                          <button key={option} className="btn ghost" onClick={() => {
-                            const preds = save.preds.slice();
-                            preds[index] = choice;
-                            patch({ preds });
-                            setNote(choice === item.answer ? item.why : `${item.why} ${confidence === 2 ? "You were sure. Slow down on this one." : ""}`);
-                          }}>
-                            {option}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <p>{save.preds[index] === item.answer ? "Your call matched the sim." : `The sim played a different ending. ${item.why}`}</p>
-                  )}
-                </article>
-              ))}
-              {save.preds.length === 6 && <button className="btn" onClick={() => grant("code", 15, "Enough clicking. Forge the Line Keeper.")}>Write the consumer</button>}
+              <p>Call each outcome before the sim runs. One board at a time.</p>
+              {PREDS.map((item, index) => {
+                const locked = typeof save.preds[index] === "number";
+                const current = PREDS.findIndex((_, i) => typeof save.preds[i] !== "number");
+                if (!locked && index !== current) return null;
+                if (locked && index !== current - 1 && current !== -1) return null;
+                return (
+                  <article key={item.title} className={`card wide ${locked ? "on" : ""}`}>
+                    <strong>P{index + 1} · {item.title}</strong>
+                    <p>{item.change}</p>
+                    {!locked ? (
+                      <>
+                        <label>
+                          Confidence
+                          <input type="range" min={0} max={2} value={confidence} onChange={(event) => setConfidence(Number(event.target.value))} />
+                          <span>{["Guessing", "Think so", "Sure"][confidence]}</span>
+                        </label>
+                        <div className="grid">
+                          {item.options.map((option, choice) => (
+                            <button
+                              key={option}
+                              type="button"
+                              className="btn ghost"
+                              onClick={() => {
+                                if (choice === item.answer) {
+                                  const preds = save.preds.slice();
+                                  preds[index] = choice;
+                                  award(4, item.why);
+                                  patch({ preds });
+                                  return;
+                                }
+                                const sure = confidence === 2 ? " You were sure. Slow down on this one." : "";
+                                damage((hints ? item.why : "The sim played a different ending.") + sure);
+                                if (save.difficulty !== "ranked") {
+                                  const preds = save.preds.slice();
+                                  preds[index] = choice;
+                                  patch({ preds });
+                                }
+                              }}
+                            >
+                              {option}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <p>{save.preds[index] === item.answer ? "Your call matched the sim." : `The sim played a different ending. ${item.why}`}</p>
+                    )}
+                  </article>
+                );
+              })}
+              {PREDS.every((_, i) => typeof save.preds[i] === "number") && (save.difficulty !== "ranked" || PREDS.every((item, i) => save.preds[i] === item.answer)) && (
+                <button className="btn" type="button" onClick={() => grant("code", 15, "Enough clicking. Forge the Line Keeper.")}>Write the consumer</button>
+              )}
             </section>
           )}
 
@@ -640,6 +872,7 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
             <CodeStage
               save={save}
               tests={tests}
+              hints={hints}
               onBlank={(index, value) => {
                 const blanks = save.blanks.slice();
                 blanks[index] = value;
@@ -647,31 +880,36 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
               }}
               onRunMicro={() => {
                 const ok = BLANKS.every((blank, index) => save.blanks[index] === blank.answer);
-                setNote(ok ? "The line streams: Your order is on the way." : "A tile bounced. Check the slot Vyapti just named.");
                 if (!ok) {
                   const missAt = BLANKS.findIndex((blank, index) => save.blanks[index] !== blank.answer);
-                  setNote(missAt >= 0 ? `${BLANKS[missAt].slot} is still wrong.` : note);
+                  damage(missAt >= 0 ? `${BLANKS[missAt].slot} is still wrong.` : "A tile bounced.");
+                  return;
                 }
+                const assembled = keepLine(DEMO_CHUNKS);
+                award(8, `The line streams: ${assembled.text}`);
               }}
               onGuide={(index) => {
                 const guided = save.guided.slice();
                 guided[index] = true;
+                award(3, GUIDED[index].ok);
                 patch({ guided });
-                setNote(GUIDED[index].ok);
               }}
               onTests={() => {
-                const forged = BLANKS.every((blank, index) => save.blanks[index] === blank.answer) && save.guided.every(Boolean);
-                const rows = [
+                const assembled = keepLine(DEMO_CHUNKS);
+                const keeperOk = assembled.text === "Your order is on the way." && assembled.finishReason === "stop" && assembled.pieces === 3 && assembled.usage?.total === 19;
+                const forged = BLANKS.every((blank, index) => save.blanks[index] === blank.answer) && save.guided.every(Boolean) && keeperOk;
+                const rows: [string, boolean][] = [
                   ["T1 complete", forged],
                   ["T2 no None", forged],
                   ["T3 quiet → partial", forged],
                   ["T4 error kept", forged],
                   ["T5 length → truncated", forged],
-                  ["T7 usage line", forged],
+                  ["T7 usage line", keeperOk],
                   ["T9 temperature 0.3", forged],
                 ];
                 setTests(rows.map(([name, pass]) => `${pass ? "✓" : "×"} ${name}`));
-                setNote(forged ? "Line Keeper forged. Every word, and the truth about every word." : "Visible tests failed. Finish the blanks and the four guided checks.");
+                if (forged) award(10, "Line Keeper forged. Every word, and the truth about every word.");
+                else damage("Visible tests failed. Finish the blanks and the four guided checks.");
               }}
               onAdvance={() => grant("debug", 25, "02:10 AM. Ila's hotfix just landed.")}
             />
@@ -686,11 +924,21 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
                   <p>{bug.symptom}</p>
                   {save.bugs[index] ? <p className="good">Closed.</p> : (
                     <div className="grid">
-                      <button className="btn" onClick={() => { const bugs = save.bugs.slice(); bugs[index] = true; patch({ bugs }); setBugNote(""); setNote("That test goes green."); }}>
+                      <button
+                        className="btn"
+                        type="button"
+                        onClick={() => {
+                          const bugs = save.bugs.slice();
+                          bugs[index] = true;
+                          award(5, "That test goes green.");
+                          setBugNote("");
+                          patch({ bugs });
+                        }}
+                      >
                         {bug.fix}
                       </button>
                       {bug.wrong.map((move) => (
-                        <button key={move.label} className="btn ghost" onClick={() => { setBugNote(move.line); setNote(move.line); }}>
+                        <button key={move.label} className="btn ghost" type="button" onClick={() => { setBugNote(move.line); damage(move.line); }}>
                           {move.label}
                         </button>
                       ))}
@@ -700,7 +948,7 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
               ))}
               {bugNote && <p className="bad">{bugNote}</p>}
               {save.bugs.filter(Boolean).length >= 4 && (
-                <button className="btn" onClick={() => grant("boss", 15, "Peak rush. Her shield is up.")}>Face the board</button>
+                <button className="btn" type="button" onClick={() => grant("boss", 15, "Peak rush. Her shield is up.")}>Face the board</button>
               )}
             </section>
           )}
@@ -709,7 +957,7 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
             <section>
               <h2>The All-Good Board</h2>
               <div className="meter" aria-label={`Shield ${save.shield}`}><i style={{ width: `${save.shield}%` }} /></div>
-              <p className="hearts" aria-label={`${save.hearts} hearts`}>{"♥".repeat(save.hearts)}{"♡".repeat(3 - save.hearts)} <span className="mono">shield {save.shield}</span></p>
+              <p className="hearts" aria-label={`${save.hearts} hearts`}>{"♥".repeat(Math.max(0, save.hearts))}{"♡".repeat(Math.max(0, maxHearts - save.hearts))} <span className="mono">shield {save.shield}</span></p>
               <p>Ila: {save.phase === 0 ? "Green is a feeling." : save.phase === 1 ? "Customers don't want truth. They want a tick." : "Honest dashboards make terrible screenshots."}</p>
               {save.phase < 3 && (
                 <article className="card wide">
@@ -717,23 +965,21 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
                   <p>{BOSS[save.phase].brief}</p>
                   <div className="grid">
                     {BOSS[save.phase].options.map((option) => (
-                      <button key={option} className="btn ghost" onClick={() => {
-                        if (option !== BOSS[save.phase].right) {
-                          const hearts = save.hearts - 1;
-                          if (hearts <= 0) {
-                            patch({ hearts: 3 });
-                            setNote("Recovery. Replay the rule: quiet is not done, and a stream is read once. Same phase, hearts restored. XP stays.");
+                      <button
+                        key={option}
+                        type="button"
+                        className="btn ghost"
+                        onClick={() => {
+                          if (option !== BOSS[save.phase].right) {
+                            damage("That would ship a lie to a customer.");
                             return;
                           }
-                          patch({ hearts });
-                          setNote("That would ship a lie to a customer. Heart lost.");
-                          return;
-                        }
-                        const phase = save.phase + 1;
-                        const shield = phase === 1 ? 70 : phase === 2 ? 30 : 0;
-                        patch({ phase, shield });
-                        setNote(shield === 0 ? "Then stop screenshotting. Start shipping." : "Shield cracked.");
-                      }}>
+                          const phase = save.phase + 1;
+                          const shield = phase === 1 ? 70 : phase === 2 ? 30 : 0;
+                          award(8, shield === 0 ? "Then stop screenshotting. Start shipping." : "Shield cracked.");
+                          patch({ phase, shield });
+                        }}
+                      >
                         {option}
                       </button>
                     ))}
@@ -741,7 +987,7 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
                 </article>
               )}
               {save.shield === 0 && (
-                <button className="btn" onClick={() => grant("win", 20, "Line restored. Every word, and the truth about every word.")}>
+                <button className="btn" type="button" onClick={() => grant("win", 20, "Line restored. Every word, and the truth about every word.")}>
                   Break the shield
                 </button>
               )}
@@ -750,16 +996,24 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
 
           {save.stage === "win" && (
             <section className="phone">
-              <h2>Last Word</h2>
-              <p>Badge earned. You don't call it done until the stream says it's done.</p>
+              <div className="result-card">
+                <p className="kicker">Match result · {rank}</p>
+                <h2>Last Word</h2>
+                <p>Badge earned. You don't call it done until the stream says it's done.</p>
+                <ul>
+                  <li><b>{save.xp}</b> XP this mission</li>
+                  <li><b>{save.coins}</b> coins · best streak ×{save.bestStreak || 1}</li>
+                  <li>Hearts lost {save.heartsLost} · attempts {save.attempts}</li>
+                  <li>Loot: {result.badge}</li>
+                </ul>
+              </div>
               <p>Item: Ember Thread, a strand of Vyapti's amber core.</p>
-              <p className="xp">{save.xp} XP this mission.</p>
               <Bubble who="Bot" text="Your order is on the way." />
               <Bubble who="Ila" text="I didn't break your stream this time. I just tuned it. Temperature 1.9." />
               <p>Mission 3.6 is the dials: temperature and the token cap.</p>
               <div className="row">
                 {onNext && <button className="btn" type="button" onClick={onNext}>Open The Dials</button>}
-                <button className="btn ghost" onClick={() => { localStorage.removeItem(SAVE); setSave(fresh()); }}>Play again</button>
+                <button className="btn ghost" type="button" onClick={() => { localStorage.removeItem(SAVE); setSave({ ...fresh(), difficulty, hearts: TUNING[difficulty].hearts, startedAt: Date.now() }); }}>Play again</button>
               </div>
             </section>
           )}
@@ -778,7 +1032,7 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
             ["Clues", save.clues.length, 4],
             ["Explore", save.checks.filter(Boolean).length, 6],
             ["Chats", save.chats.length, 3],
-            ["Predictions", save.preds.length, 6],
+            ["Predictions", save.preds.filter((p) => typeof p === "number").length, 6],
             ["Bugs", save.bugs.filter(Boolean).length, 5],
           ].map(([name, have, total]) => (
             <div className="check" key={String(name)}>
@@ -789,17 +1043,17 @@ export function Unfinished({ onMap, onNext }: { onMap?: () => void; onNext?: () 
               <div className="meter" aria-hidden><i style={{ width: `${(Number(have) / Number(total)) * 100}%` }} /></div>
             </div>
           ))}
-          <p className="fine">The goal line fills in and never resets.</p>
+          <p className="fine">The goal line fills in and never resets. Checkpoints keep your XP.</p>
         </aside>
       </div>
     </div>
   );
 }
 
-function Bubble({ who, text, frozen }: { who: string; text: string; frozen?: boolean }) {
+function Bubble({ who, text, frozen, delay }: { who: string; text: string; frozen?: boolean; delay?: number }) {
   const shown = frozen ? text.replace("|", "") : text;
   return (
-    <p className={`bubble ${frozen ? "frozen" : ""}`}>
+    <p className={`bubble ${frozen ? "frozen" : ""}`} style={delay ? { animationDelay: `${delay * 180}ms` } : undefined}>
       <span>{who}</span>
       {shown}
       {frozen && <i className="caret" aria-hidden />}
@@ -815,6 +1069,7 @@ function Explore(props: {
   length: number;
   order: string[];
   words: string[];
+  hints: boolean;
   onLength: (value: number) => void;
   onFlush: (value: boolean) => void;
   onPlay: () => void;
@@ -832,32 +1087,32 @@ function Explore(props: {
     <section>
       <h2>Packet scope</h2>
       <div className="scope">
-        {props.words.map((word) => <span key={word}>{word}</span>)}
+        {props.words.map((word, i) => <span key={`${word}-${i}`}>{word}</span>)}
       </div>
       <p className="terminal" aria-live="polite">{props.flush ? props.typed || "press play" : props.playing ? "buffer held…" : props.typed || "buffer held"}</p>
       <div className="row">
-        <button className="btn" onClick={props.onPlay} disabled={props.playing}>Play</button>
+        <button className="btn" type="button" onClick={props.onPlay} disabled={props.playing}>Play</button>
         <label>Length <input type="range" min={1} max={6} value={props.length} onChange={(event) => props.onLength(Number(event.target.value))} /></label>
         <label><input type="checkbox" checked={props.flush} onChange={(event) => props.onFlush(event.target.checked)} /> flush</label>
       </div>
       {needRecap1 && (
         <article className="card wide">
-          <strong>Recap · drag the order</strong>
+          <strong>Recap · tap the order</strong>
           <p>Wire, then chunk, then text.</p>
           <div className="row">
             {["wire", "chunk", "text"].map((card) => (
-              <button key={card} className="btn ghost" onClick={() => props.onOrder(props.order.includes(card) ? props.order : [...props.order, card])}>{card}</button>
+              <button key={card} type="button" className={`btn ghost${props.order.includes(card) ? " on" : ""}`} onClick={() => props.onOrder(props.order.includes(card) ? props.order : [...props.order, card])}>{card}</button>
             ))}
           </div>
           <p>{props.order.join(" → ") || "Tap in order"}</p>
-          <button className="btn" onClick={props.onRecap1}>Lock recap</button>
+          <button className="btn" type="button" onClick={props.onRecap1}>Lock recap</button>
         </article>
       )}
       {needRecap2 && (
         <article className="card wide">
           <strong>Recap · six for six</strong>
           <p>Stream for speed. SSE to [DONE]. Text in delta.content. Flush live. One pass. finish_reason.</p>
-          <button className="btn" onClick={props.onRecap2}>Mark the six</button>
+          <button className="btn" type="button" onClick={props.onRecap2}>Mark the six</button>
         </article>
       )}
       {step && !needRecap1 && (
@@ -865,17 +1120,17 @@ function Explore(props: {
           <p className="kicker">{step.id}</p>
           <h3>{step.title}</h3>
           <p>{step.analogy}</p>
-          <p>{step.watch}</p>
-          <p>{step.poke}</p>
+          {props.hints && <p>{step.watch}</p>}
+          {props.hints && <p>{step.poke}</p>}
           <p><strong>{step.q}</strong></p>
           <div className="grid">
             {step.options.map((option, picked) => (
-              <button key={option} className="btn ghost" onClick={() => props.onCheck(index, picked)}>{option}</button>
+              <button key={option} type="button" className="btn ghost" onClick={() => props.onCheck(index, picked)}>{option}</button>
             ))}
           </div>
         </article>
       )}
-      {props.save.recap2 && <button className="btn" onClick={props.onAdvance}>Take the dinner rush</button>}
+      {props.save.recap2 && <button className="btn" type="button" onClick={props.onAdvance}>Take the dinner rush</button>}
     </section>
   );
 }
@@ -883,6 +1138,7 @@ function Explore(props: {
 function CodeStage(props: {
   save: Progress;
   tests: string[];
+  hints: boolean;
   onBlank: (index: number, value: string) => void;
   onRunMicro: () => void;
   onGuide: (index: number) => void;
@@ -891,12 +1147,14 @@ function CodeStage(props: {
 }) {
   const microOk = BLANKS.every((blank, index) => props.save.blanks[index] === blank.answer);
   const guidedOk = props.save.guided.every(Boolean);
+  const assembled = keepLine(DEMO_CHUNKS);
   return (
     <section>
       <h2>Forge the Line Keeper</h2>
+      <p>Fill the missing blocks, then run them. The keeper must skip empty choices, append deltas, and stop on finish_reason.</p>
       <div className="grid">
         {BLANKS.map((blank, index) => (
-          <label key={blank.slot} className="card">
+          <label key={blank.slot} className={`card ${props.save.blanks[index] === blank.answer ? "on" : ""}`}>
             <span>{blank.slot}</span>
             <select value={props.save.blanks[index]} onChange={(event) => props.onBlank(index, event.target.value)}>
               <option value="">Choose</option>
@@ -905,21 +1163,25 @@ function CodeStage(props: {
           </label>
         ))}
       </div>
-      <button className="btn" onClick={props.onRunMicro}>Run the blocks</button>
+      <button className="btn" type="button" onClick={props.onRunMicro}>Run the blocks</button>
       {microOk && (
-        <div className="grid">
-          {GUIDED.map((step, index) => (
-            <button key={step.step} className="card" disabled={props.save.guided[index]} onClick={() => props.onGuide(index)}>
-              <strong>{step.step}</strong>
-              <span>{props.save.guided[index] ? "Check passed" : step.check}</span>
-            </button>
-          ))}
-        </div>
+        <article className="card wide keeper-live">
+          <p className="kicker">Line Keeper live</p>
+          <p className="terminal">{assembled.text || "…"} · finish_reason {assembled.finishReason} · pieces {assembled.pieces} · usage {assembled.usage?.total ?? "?"}</p>
+          <div className="grid">
+            {GUIDED.map((step, index) => (
+              <button key={step.step} type="button" className="card" disabled={props.save.guided[index]} onClick={() => props.onGuide(index)}>
+                <strong>{step.step}</strong>
+                <span>{props.save.guided[index] ? "Check passed" : step.check}</span>
+              </button>
+            ))}
+          </div>
+        </article>
       )}
-      {guidedOk && <button className="btn" onClick={props.onTests}>Run visible tests</button>}
-      {props.tests.length > 0 && <ul>{props.tests.map((row) => <li key={row}>{row}</li>)}</ul>}
-      {props.tests.some((row) => row.startsWith("✓")) && props.tests.every((row) => row.startsWith("✓")) && (
-        <button className="btn" onClick={props.onAdvance}>Open Ila's diff</button>
+      {guidedOk && <button className="btn" type="button" onClick={props.onTests}>Run visible tests</button>}
+      {props.tests.length > 0 && <ul className="test-list">{props.tests.map((row) => <li key={row} className={row.startsWith("✓") ? "good" : "bad"}>{row}</li>)}</ul>}
+      {props.tests.length > 0 && props.tests.every((row) => row.startsWith("✓")) && (
+        <button className="btn" type="button" onClick={props.onAdvance}>Open Ila's diff</button>
       )}
     </section>
   );
